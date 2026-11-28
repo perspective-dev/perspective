@@ -436,9 +436,8 @@ test.describe("Panel context menu", () => {
         // Load a table from a SECOND client into the active panel, so the
         // element has two loaded clients.
         await page.evaluate(async () => {
-            const { default: perspective } = await import(
-                "/node_modules/@perspective-dev/client/dist/cdn/perspective.js"
-            );
+            const { default: perspective } =
+                await import("/node_modules/@perspective-dev/client/dist/cdn/perspective.js");
 
             const worker = await perspective.worker();
             const table = await worker.table("a,b\n3,4", {

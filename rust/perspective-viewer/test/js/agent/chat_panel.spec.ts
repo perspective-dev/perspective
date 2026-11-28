@@ -14,7 +14,12 @@
 // OpenAI-compatible engine as `agent.spec.ts`. The chat panel is a pure view
 // over the shared agent slot, so the transcript must survive tab switches.
 
-import { test, expect, compareInnerHTMLToSnapshot } from "../helpers.ts";
+import {
+    test,
+    expect,
+    compareInnerHTMLToSnapshot,
+    openWorkspaceTab,
+} from "../helpers.ts";
 
 test.beforeEach(async ({ page }) => {
     await page.goto("/rust/perspective-viewer/test/html/superstore.html");
@@ -150,14 +155,18 @@ test.describe("llm-agent chat panel", () => {
     test("chat tab is hidden until agentConfig() is called", async ({
         page,
     }) => {
-        const tab = page.locator("perspective-viewer #chat_tabbar_tab");
+        await openWorkspaceTab(page, "tables");
+        const tab = page.locator("perspective-viewer #workspace_chat_tab");
         await expect(
-            page.locator("perspective-viewer #query_tabbar_tab"),
+            page.locator("perspective-viewer #workspace_tables_tab"),
         ).toBeVisible();
 
         await expect(tab).toHaveCount(0);
         await configure(page, []);
         await expect(tab).toBeVisible();
+        await expect(
+            page.locator("perspective-viewer #chat_tabbar_tab"),
+        ).toHaveCount(0);
     });
 
     test("sending a prompt renders the transcript and applies the config", async ({
@@ -172,7 +181,7 @@ test.describe("llm-agent chat panel", () => {
             { text: "Grouped by state." },
         ]);
 
-        await page.locator("perspective-viewer #chat_tabbar_tab").click();
+        await openWorkspaceTab(page, "chat");
         const input = page.locator("perspective-viewer #chat_input");
         await input.fill("Show me sales by state");
         await input.press("Enter");
@@ -194,7 +203,7 @@ test.describe("llm-agent chat panel", () => {
 
     test("stop cancels an in-flight turn", async ({ page }) => {
         await configure(page, [{ hang: true }]);
-        await page.locator("perspective-viewer #chat_tabbar_tab").click();
+        await openWorkspaceTab(page, "chat");
         const input = page.locator("perspective-viewer #chat_input");
         await input.fill("This will hang");
         await input.press("Enter");
@@ -219,7 +228,7 @@ test.describe("llm-agent chat panel", () => {
             },
         ]);
 
-        await page.locator("perspective-viewer #chat_tabbar_tab").click();
+        await openWorkspaceTab(page, "chat");
         const input = page.locator("perspective-viewer #chat_input");
         await input.fill("Stream it");
         await input.press("Enter");
@@ -258,7 +267,7 @@ test.describe("llm-agent chat panel", () => {
             },
         ]);
 
-        await page.locator("perspective-viewer #chat_tabbar_tab").click();
+        await openWorkspaceTab(page, "chat");
         const input = page.locator("perspective-viewer #chat_input");
         await input.fill("Think at length");
         await input.press("Enter");
@@ -312,7 +321,7 @@ test.describe("llm-agent chat panel", () => {
             },
         ]);
 
-        await page.locator("perspective-viewer #chat_tabbar_tab").click();
+        await openWorkspaceTab(page, "chat");
         const input = page.locator("perspective-viewer #chat_input");
         await input.fill("Think");
         await input.press("Enter");
@@ -354,7 +363,7 @@ test.describe("llm-agent chat panel", () => {
             { text: "Grouped." },
         ]);
 
-        await page.locator("perspective-viewer #chat_tabbar_tab").click();
+        await openWorkspaceTab(page, "chat");
         const input = page.locator("perspective-viewer #chat_input");
         await input.fill("Group by state");
         await input.press("Enter");
@@ -416,7 +425,7 @@ test.describe("llm-agent chat panel", () => {
                 { text: "Done." },
             ]);
 
-            await page.locator("perspective-viewer #chat_tabbar_tab").click();
+            await openWorkspaceTab(page, "chat");
             const input = page.locator("perspective-viewer #chat_input");
             await input.fill("Think then act");
             await input.press("Enter");
@@ -444,7 +453,7 @@ test.describe("llm-agent chat panel", () => {
             { text: "That expression is invalid." },
         ]);
 
-        await page.locator("perspective-viewer #chat_tabbar_tab").click();
+        await openWorkspaceTab(page, "chat");
         const input = page.locator("perspective-viewer #chat_input");
         await input.fill("Add a computed column");
         await input.press("Enter");
@@ -461,7 +470,7 @@ test.describe("llm-agent chat panel", () => {
 test.describe("llm-agent chat entitlements and reset", () => {
     test("entitlement toggles list only the host grant", async ({ page }) => {
         await configure(page, []);
-        await page.locator("perspective-viewer #chat_tabbar_tab").click();
+        await openWorkspaceTab(page, "chat");
         await expect(
             page.locator("perspective-viewer .chat-entitlement"),
         ).toHaveCount(2);
@@ -496,7 +505,7 @@ test.describe("llm-agent chat entitlements and reset", () => {
         page,
     }) => {
         await configure(page, [{ text: "Done." }]);
-        await page.locator("perspective-viewer #chat_tabbar_tab").click();
+        await openWorkspaceTab(page, "chat");
         const chip = page.locator(
             'perspective-viewer .chat-entitlement[data-entitlement="configure_view"]',
         );
@@ -528,7 +537,7 @@ test.describe("llm-agent chat entitlements and reset", () => {
             return await document.querySelector("perspective-viewer").save();
         });
 
-        await page.locator("perspective-viewer #chat_tabbar_tab").click();
+        await openWorkspaceTab(page, "chat");
         await page
             .locator(
                 'perspective-viewer .chat-entitlement[data-entitlement="configure_view"]',
@@ -556,7 +565,7 @@ test.describe("llm-agent chat entitlements and reset", () => {
         page,
     }) => {
         await configure(page, [{ hang: true }]);
-        await page.locator("perspective-viewer #chat_tabbar_tab").click();
+        await openWorkspaceTab(page, "chat");
         const reset = page.locator("perspective-viewer #chat_reset_button");
         const chips = page.locator("perspective-viewer .chat-entitlement");
         await expect(reset).toBeDisabled();
@@ -582,7 +591,7 @@ test.describe("llm-agent chat entitlements and reset", () => {
 
     test("agentConfig() turns every entitlement back on", async ({ page }) => {
         await configure(page, []);
-        await page.locator("perspective-viewer #chat_tabbar_tab").click();
+        await openWorkspaceTab(page, "chat");
         const chip = page.locator(
             'perspective-viewer .chat-entitlement[data-entitlement="manage_layout"]',
         );
@@ -604,7 +613,7 @@ test.describe("llm-agent chat entitlements and reset", () => {
             entitlements: ["configure_view", "manage_layout"],
         });
 
-        await page.locator("perspective-viewer #chat_tabbar_tab").click();
+        await openWorkspaceTab(page, "chat");
         const chips = page.locator("perspective-viewer .chat-entitlement");
         for (const chip of await chips.all()) {
             await chip.click();
@@ -625,7 +634,7 @@ test.describe("llm-agent chat entitlements and reset", () => {
         page,
     }) => {
         await configure(page, [{ text: "First." }, { text: "Second." }]);
-        await page.locator("perspective-viewer #chat_tabbar_tab").click();
+        await openWorkspaceTab(page, "chat");
         await send(page, "one");
         const log = page.locator("perspective-viewer #chat_log");
         await expect(

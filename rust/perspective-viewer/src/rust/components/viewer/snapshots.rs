@@ -146,9 +146,10 @@ impl PerspectiveViewer {
         changed
     }
 
-    pub(super) fn on_update_in_flight(&mut self, count: u32) -> bool {
-        let changed = count != self.update_count;
-        self.update_count = count;
+    pub(super) fn on_update_workspace_status(&mut self, ctx: &Context<Self>) -> bool {
+        let status = crate::queries::workspace_status(&ctx.props().workspace);
+        let changed = status != self.workspace_status;
+        self.workspace_status = status;
         changed
     }
 }

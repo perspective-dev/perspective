@@ -79,6 +79,11 @@ prost-types = { version = "0.12.3" }
 getrandom = { version = "0", features = ["wasm_js"] }
 num-traits = "0.2.19"
 rand = { version = ">=0.9,<1" }
+
+# JSON Schema (draft 2020-12) for the config types, emitted by `rust/metadata`
+# for the viewer agent's tool parameters. `preserve_order` keeps properties in
+# declaration order.
+schemars = { version = "1.2.3", features = ["preserve_order"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_bytes = { version = "0.11" }
 serde_json = { version = "1.0.107", features = ["raw_value", "preserve_order"] }

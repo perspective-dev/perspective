@@ -12,7 +12,7 @@
 
 import * as all_benchmarks from "./cross_platform_suite.mjs";
 import * as perspective_bench from "./src/js/benchmark.mjs";
-import * as puppeteer from "puppeteer";
+import { chromium } from "@playwright/test";
 
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -59,10 +59,7 @@ perspective_bench.suite(
     async function (path, version_idx) {
         let client, metadata;
         console.log(path);
-        const browser = await puppeteer.launch({
-            headless: true,
-            protocolTimeout: 100_000_000,
-        });
+        const browser = await chromium.launch({ channel: "chromium" });
         const page = await browser.newPage();
 
         await page.goto("http://localhost:8081/empty.html");

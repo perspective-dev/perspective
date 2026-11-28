@@ -97,7 +97,7 @@ export function query_commands(
 
 /**
  * Whether `location` is in the app's scopes, asked with an empty frame so no
- * schema call runs.
+ * schema call runs; `false` when the host throws.
  */
 export function is_command_scope(
     plugin: DatagridPluginElement,
@@ -116,7 +116,12 @@ export function is_command_scope(
         data: {},
     };
 
-    return viewer.queryCommands(plugin, location, frame, []) !== undefined;
+    try {
+        return viewer.queryCommands(plugin, location, frame, []) !== undefined;
+    } catch (error) {
+        console.error(`Failed to query "${location}" command scope`, error);
+        return false;
+    }
 }
 
 function command_button(

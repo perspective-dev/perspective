@@ -28,7 +28,7 @@ use std::rc::Rc;
 use perspective_client::config::*;
 use perspective_client::proto::ViewDimensionsResp;
 use perspective_client::{
-    Client, ClientError, DescribeError, Description, ExprValidationResult, ReconnectCallback, View,
+    Client, Connection, DescribeError, Description, ExprValidationResult, ReconnectCallback, View,
 };
 use perspective_js::apierror;
 use perspective_js::utils::*;
@@ -132,10 +132,9 @@ pub struct SessionHandle {
     /// `session_props.has_table_cells` for the active panel.
     pub on_stats_changed: RefCell<Option<Callback<()>>>,
 
-    /// Injected callback from the root component, replacing the former
-    /// `table_errored: PubSub` field.  Fires when an error is set on the
-    /// session (table load failure, client disconnect, invalid config, etc.).
-    pub on_table_errored: RefCell<Option<Callback<()>>>,
+    /// Fires when an error is set on the session (table load failure,
+    /// client disconnect, invalid config, etc.).
+    pub table_errored: PubSub<()>,
 }
 
 impl Deref for SessionHandle {
@@ -686,43 +685,44 @@ impl Session {
         Some(fut)
     }
 
-    /// Record a connection error on `client` as this panel's lost binding — for
-    /// as long as `client` is the one the panel is bound through.
-    async fn watch_client(&self, client: &Client) -> ApiResult<()> {
-        let on_error = self.on_table_errored.borrow().clone();
-        let session = self.clone();
-        let watched = client.clone();
-        let poll_loop = LocalPollLoop::new(move |(message, reconnect): (ApiError, _)| {
-            if session.get_client().as_ref() != Some(&watched) {
-                return Ok(JsValue::UNDEFINED);
-            }
+    /// Record `client`'s lost connection as this panel's lost binding, if it
+    /// is the one the panel is bound through.
+    pub(crate) fn mark_lost(&self, client: &Client) {
+        let Connection::Lost { error, reconnect } = client.connection() else {
+            return;
+        };
 
-            let next = session
-                .borrow()
-                .state
-                .with_lost(TableErrorState(message, reconnect));
-            session.borrow_mut().swap(next);
-            if let Some(cb) = &on_error {
-                cb.emit(());
-            }
-            if let Some(sub) = session.borrow_mut().view_sub.take() {
-                sub.dismiss();
-            }
+        if self.get_client().as_ref() != Some(client) {
+            return;
+        }
 
-            Ok(JsValue::UNDEFINED)
+        let reconnect = reconnect.map(|_| {
+            let client = client.clone();
+            ReconnectCallback::new(move || {
+                clone!(client);
+                Box::pin(async move {
+                    match client.connection() {
+                        Connection::Open => Ok(()),
+                        Connection::Lost {
+                            reconnect: Some(reconnect),
+                            ..
+                        } => reconnect().await,
+                        Connection::Lost { error, .. } => Err(error.into()),
+                    }
+                })
+            })
         });
 
-        let _callback_id = client
-            .on_error(Box::new(move |message: ClientError, reconnect| {
-                let poll_loop = poll_loop.clone();
-                async move {
-                    poll_loop.poll((message.into(), reconnect)).await;
-                    Ok(())
-                }
-            }))
-            .await?;
+        let next = self
+            .borrow()
+            .state
+            .with_lost(TableErrorState(error.into(), reconnect));
 
-        Ok(())
+        self.borrow_mut().swap(next);
+        self.table_errored.emit(());
+        if let Some(sub) = self.borrow_mut().view_sub.take() {
+            sub.dismiss();
+        }
     }
 
     pub async fn set_error(&self, reset_table: bool, err: ApiError) -> ApiResult<()> {
@@ -750,9 +750,7 @@ impl Session {
         let next = self.borrow().state.with_lost(error);
         self.borrow_mut().swap(next);
 
-        if let Some(cb) = self.on_table_errored.borrow().as_ref() {
-            cb.emit(());
-        }
+        self.table_errored.emit(());
 
         let sub = self.borrow_mut().view_sub.take();
         if reset_table {
@@ -792,6 +790,11 @@ impl Session {
     /// Whether the binding is lost.
     pub(crate) fn is_errored(&self) -> bool {
         self.borrow().error().is_some()
+    }
+
+    /// The lost binding's error, if any.
+    pub(crate) fn error_state(&self) -> Option<TableErrorState> {
+        self.borrow().error().cloned()
     }
 
     pub(crate) fn get_error(&self) -> Option<ApiError> {
@@ -1276,10 +1279,9 @@ impl Session {
                     bound.map(|bound| (bound.table.clone(), bound.metadata.clone())),
                 )
             },
-            BindPlan::Bind { table, client, .. } => {
+            BindPlan::Bind { table, .. } => {
                 let metadata = Rc::new(SessionMetadata::from_table(&table).await?);
                 let binding = PreparedBinding::Bind {
-                    client: client.clone(),
                     table: table.clone(),
                     metadata: metadata.clone(),
                 };
@@ -1382,19 +1384,12 @@ impl Session {
         let state = self.borrow().state.clone();
         let title_before = state.chrome.title.clone();
         let had_table = state.bound().is_some();
-        let (rebound, watch) = match view.binding {
-            PreparedBinding::Keep => (None, None),
-            PreparedBinding::Bind {
-                client,
-                table,
-                metadata,
-            } => (
-                Some(state.bound_to(*table, (*metadata).clone())),
-                Some(client),
-            ),
-            PreparedBinding::Pend { client, name } => {
-                (Some(state.awaiting_table(client, name)), None)
+        let rebound = match view.binding {
+            PreparedBinding::Keep => None,
+            PreparedBinding::Bind { table, metadata } => {
+                Some(state.bound_to(*table, (*metadata).clone()))
             },
+            PreparedBinding::Pend { client, name } => Some(state.awaiting_table(client, name)),
         };
 
         let rebinds = rebound.is_some();
@@ -1446,7 +1441,6 @@ impl Session {
             outgoing,
             unloaded: rebinds && had_table,
             loaded: rebinds && bound,
-            watch,
         }
     }
 
@@ -1469,24 +1463,19 @@ impl Session {
         Ok(())
     }
 
-    /// Finish a committed rebind: dispose of the outgoing `View`, announce the
-    /// table change, and watch the incoming client for errors.
+    /// Finish a committed rebind: dispose of the outgoing `View` and announce
+    /// the table change.
     pub(crate) async fn finish_binding(&self, effects: BindingEffects) -> ApiResult<()> {
         let BindingEffects {
             outgoing,
             unloaded,
             loaded,
-            watch,
             ..
         } = effects;
 
         let deleted = outgoing.delete().await;
         if unloaded {
             self.table_unloaded.emit(true);
-        }
-
-        if let Some(client) = watch {
-            self.watch_client(&client).await?;
         }
 
         if loaded {
@@ -1768,7 +1757,6 @@ pub(crate) enum BindPlan {
 
     /// Bind `table`.
     Bind {
-        client: Client,
         table: Box<perspective_client::Table>,
         reset: bool,
     },
@@ -1784,7 +1772,6 @@ pub(crate) enum BindPlan {
 enum PreparedBinding {
     Keep,
     Bind {
-        client: Client,
         table: Box<perspective_client::Table>,
         metadata: Rc<SessionMetadata>,
     },
@@ -1801,7 +1788,6 @@ pub(crate) struct BindingEffects {
     outgoing: Option<ViewSubscription>,
     unloaded: bool,
     loaded: bool,
-    watch: Option<Client>,
 }
 
 impl BindingEffects {

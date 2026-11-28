@@ -502,3 +502,22 @@ impl Component for PortalModal {
         self.detach();
     }
 }
+
+/// Create the session-long 0×0 cursor anchor at viewport `(x, y)` as a
+/// light-DOM child of `viewer` in the modal slot.
+pub fn session_anchor(viewer: &HtmlElement, x: f64, y: f64) -> HtmlElement {
+    let anchor: HtmlElement = global::document()
+        .create_element("div")
+        .unwrap()
+        .unchecked_into();
+
+    let _ = anchor.set_attribute("slot", MODAL_SLOT);
+    let style = anchor.style();
+    let _ = style.set_property("position", "fixed");
+    let _ = style.set_property("left", &format!("{x}px"));
+    let _ = style.set_property("top", &format!("{y}px"));
+    let _ = style.set_property("width", "0px");
+    let _ = style.set_property("height", "0px");
+    let _ = viewer.append_child(&anchor);
+    anchor
+}

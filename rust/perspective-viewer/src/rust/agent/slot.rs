@@ -89,6 +89,19 @@ impl AgentSlot {
         self.on_update.emit(());
     }
 
+    /// Resolve the configured runtime's `docs` source (re-rendering the chat
+    /// badge once it settles), failing if it fails to load.
+    pub async fn load_docs(&self) -> ApiResult<()> {
+        let runtime = self.runtime.borrow().clone();
+        let result = match runtime {
+            Some(runtime) => runtime.load_docs().await,
+            None => Ok(()),
+        };
+
+        self.on_update.emit(());
+        result
+    }
+
     /// The scripts started by `run_script`, which outlive agent
     /// reconfiguration.
     pub fn sandbox(&self) -> Rc<AgentSandbox> {
@@ -106,6 +119,14 @@ impl AgentSlot {
     /// Provider/model badge text for the chat UI.
     pub fn label(&self) -> Option<String> {
         self.runtime.borrow().as_ref().map(|x| x.label())
+    }
+
+    /// Whether the configured `docs` source has loaded.
+    pub fn docs_loaded(&self) -> bool {
+        self.runtime
+            .borrow()
+            .as_ref()
+            .is_some_and(|x| x.docs_loaded())
     }
 
     /// The user-toggleable entitlements of the host's grant.

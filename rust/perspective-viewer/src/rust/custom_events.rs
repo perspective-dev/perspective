@@ -276,6 +276,13 @@ pub fn wire_element_events(
         }
     });
 
+    let workspace_drawer_sub = presentation.workspace_drawer_open_changed.add_listener({
+        clone!(elem);
+        move |open: bool| {
+            dispatch_event(&elem, "toggle-workspace-settings", open).unwrap();
+        }
+    });
+
     let column_settings_sub = presentation.column_settings_open_changed.add_listener({
         clone!(elem, workspace);
         move |(open, column_name)| {
@@ -348,6 +355,7 @@ pub fn wire_element_events(
         before_settings_sub,
         settings_sub,
         column_settings_sub,
+        workspace_drawer_sub,
         statusbar_ptr_sub,
         global_filters_sub,
     ]

@@ -16,12 +16,12 @@ use wasm_bindgen::prelude::*;
 use yew::prelude::*;
 
 use super::PerspectiveViewer;
+use super::dividers::DividerPump;
 use super::msg::PerspectiveViewerMsg::*;
-use super::msg::{Divider, PaneTarget};
 use crate::components::settings_panel::SelectedTab;
 use crate::config::*;
-use crate::presentation::{ColumnSettingsTab, ColumnSettingsTarget, OpenColumnSettings};
-use crate::queries::get_current_column_locator;
+use crate::presentation::{ColumnSettingsTarget, OpenColumnSettings};
+use crate::session::TableLoadState;
 use crate::tasks::*;
 use crate::ui::FontLoaderStatus;
 
@@ -77,29 +77,6 @@ pub(super) struct SettingsGeometry {
     /// toggle, docked unmount) - used to presize for a drawer that MOUNTS
     /// directly into pinned mode, when it isn't in the DOM to measure.
     pub column_settings_docked_width: Option<f64>,
-}
-
-#[derive(Default)]
-pub(super) struct DividerPump {
-    pub target: Option<PaneTarget>,
-    pub pumping: bool,
-    pub finish_pending: bool,
-}
-
-impl SettingsGeometry {
-    fn pump_mut(&mut self, divider: Divider) -> &mut DividerPump {
-        match divider {
-            Divider::Settings => &mut self.settings_divider,
-            Divider::ColumnSettings => &mut self.column_settings_divider,
-        }
-    }
-
-    fn is_divider_deferred(&self, divider: Divider) -> bool {
-        match divider {
-            Divider::Settings => true,
-            Divider::ColumnSettings => self.column_settings_pinned,
-        }
-    }
 }
 
 impl PerspectiveViewer {
@@ -193,7 +170,7 @@ impl PerspectiveViewer {
     /// * `force` - Whether to explicitly set the settings panel state to
     ///   Open/Close (`Some(true)`/`Some(false)`), or to just toggle the current
     ///   state (`None`).
-    fn init_toggle_settings_task(
+    pub(super) fn init_toggle_settings_task(
         &mut self,
         ctx: &Context<Self>,
         force: Option<bool>,
@@ -221,7 +198,13 @@ impl PerspectiveViewer {
                         measure_settings_open_deltas(&ctx.props().elem);
                 }
 
-                let open_deltas = self.settings_geometry.open_deltas;
+                let drawer_open = self.workspace_drawer.shown.open;
+                let bar_stays_docked = self.is_status_bar_docked(ctx, false, drawer_open);
+                let open_deltas = self
+                    .settings_geometry
+                    .open_deltas
+                    .map(|(w, h)| (w, if bar_stays_docked { 0.0 } else { h }));
+
                 let workspace = ctx.props().workspace.clone();
                 let presentation = ctx.props().presentation.clone();
                 let elem = ctx.props().elem.clone();
@@ -229,7 +212,9 @@ impl PerspectiveViewer {
                 ApiFuture::spawn(async move {
                     let result: ApiResult<JsValue> = async {
                         if is_open {
-                            let presents = presize_visible_panels_grown(&workspace, &elem).await;
+                            let presents =
+                                presize_visible_panels_grown(&workspace, &elem, bar_stays_docked)
+                                    .await;
                             let (notify, rendered) = channel::<()>();
                             callback.emit(notify);
                             presentation.set_settings_open(false, announce);
@@ -268,138 +253,23 @@ impl PerspectiveViewer {
         };
     }
 
-    fn apply_pane_target(&mut self, divider: Divider, target: PaneTarget) -> bool {
-        let deferred = self.settings_geometry.is_divider_deferred(divider);
-        match (divider, target) {
-            (Divider::Settings, PaneTarget::Width(w)) => {
-                self.settings_geometry.pane_width_override = Some(w);
-                true
-            },
-            (Divider::Settings, PaneTarget::Natural) => {
-                self.settings_geometry.pane_width_override = None;
-                self.settings_geometry.auto_width = 0.0;
-                self.on_settings_panel_dimensions_reset.emit(());
-                true
-            },
-            (Divider::ColumnSettings, PaneTarget::Width(w)) => {
-                self.settings_geometry.column_settings_width_override = Some(w);
-                deferred
-            },
-            (Divider::ColumnSettings, PaneTarget::Natural) => {
-                self.settings_geometry.column_settings_width_override = None;
-                self.settings_geometry.column_settings_auto_width = 0.0;
-                true
-            },
-        }
-    }
-
-    pub(super) fn on_divider_move(
-        &mut self,
+    /// Whether the status bar docks for these settings and workspace drawer
+    /// states, mirroring `StatusBar`'s docked branch.
+    pub(super) fn is_status_bar_docked(
+        &self,
         ctx: &Context<Self>,
-        divider: Divider,
-        target: PaneTarget,
+        settings_open: bool,
+        drawer_open: bool,
     ) -> bool {
-        if !self.settings_geometry.is_divider_deferred(divider) {
-            return self.apply_pane_target(divider, target);
-        }
-
-        // Latest-wins: overwrite the pending target; start the pump if
-        // idle. Intermediate targets that arrive while a presize is in
-        // flight are dropped (mirrors `PresizeQueue`'s single queued
-        // slot) — the pane tracks the pointer at content-render rate.
-        let pump = self.settings_geometry.pump_mut(divider);
-        pump.target = Some(target);
-        if !pump.pumping {
-            pump.pumping = true;
-            ctx.link().send_message(DividerPump(divider));
-        }
-
-        false
+        settings_open
+            || drawer_open
+            || ctx.props().workspace.is_empty_stage()
+            || !matches!(self.session_props.has_table, Some(TableLoadState::Loaded))
+            || self.session_props.is_errored()
+            || self.renderer_props.render_error.is_some()
     }
 
-    pub(super) fn on_divider_pump(&mut self, ctx: &Context<Self>, divider: Divider) -> bool {
-        let workspace = ctx.props().workspace.clone();
-        let pump = self.settings_geometry.pump_mut(divider);
-        let Some(target) = pump.target.take() else {
-            pump.pumping = false;
-            if std::mem::take(&mut pump.finish_pending) {
-                ApiFuture::spawn(async move {
-                    resize_visible_panels(&workspace).await;
-                    Ok(())
-                });
-            }
-
-            return false;
-        };
-
-        let elem = ctx.props().elem.clone();
-        let pane_width = match target {
-            PaneTarget::Width(w) => Some(w as f64),
-            PaneTarget::Natural => measure_pane_natural_width(&elem, divider.pane_selector()),
-        };
-
-        let link = ctx.link().clone();
-        ApiFuture::spawn(async move {
-            let presents = match pane_width {
-                Some(pane_width) => {
-                    presize_visible_panels_pane_width(
-                        &workspace,
-                        &elem,
-                        divider.pane_selector(),
-                        pane_width,
-                    )
-                    .await
-                },
-                None => StagedPresents::default(),
-            };
-
-            link.send_message(DividerCommit(divider, target));
-            presents.reveal();
-            Ok(())
-        });
-
-        false
-    }
-
-    pub(super) fn on_divider_commit(
-        &mut self,
-        ctx: &Context<Self>,
-        divider: Divider,
-        target: PaneTarget,
-    ) -> bool {
-        // Every visible panel has rendered at (approximately) its
-        // target box — NOW move the geometry: the re-render below
-        // applies this target to the deferred `SplitPanel`'s controlled
-        // `size`, in the same task as the presizes' inline clears.
-        self.apply_pane_target(divider, target);
-        if target == PaneTarget::Natural {
-            self.settings_geometry.pump_mut(divider).finish_pending = true;
-        }
-
-        ctx.link().send_message(DividerPump(divider));
-        true
-    }
-
-    pub(super) fn on_divider_finish(&mut self, ctx: &Context<Self>, divider: Divider) -> bool {
-        if !self.settings_geometry.is_divider_deferred(divider) {
-            return false;
-        }
-
-        let pump = self.settings_geometry.pump_mut(divider);
-        if pump.pumping {
-            pump.finish_pending = true;
-        } else {
-            let workspace = ctx.props().workspace.clone();
-            ApiFuture::spawn(async move {
-                resize_visible_panels(&workspace).await;
-                Ok(())
-            });
-        }
-
-        false
-    }
-
-    fn resize_for_ratchet(&self, ctx: &Context<Self>) {
+    pub(super) fn resize_for_ratchet(&self, ctx: &Context<Self>) {
         let workspace = ctx.props().workspace.clone();
         ApiFuture::spawn(async move {
             resize_visible_panels(&workspace).await;
@@ -421,231 +291,6 @@ impl PerspectiveViewer {
         } else {
             false
         }
-    }
-
-    /// The open column settings of `target`, on the tab its column opens to.
-    fn column_settings_for(&self, target: Option<ColumnSettingsTarget>) -> OpenColumnSettings {
-        let tab = match &target {
-            Some(ColumnSettingsTarget::NewExpression) => Some(ColumnSettingsTab::Attributes),
-            Some(ColumnSettingsTarget::Column(name)) => {
-                Some(if self.session_props.is_column_active(name) {
-                    ColumnSettingsTab::Style
-                } else {
-                    ColumnSettingsTab::Attributes
-                })
-            },
-            None => None,
-        };
-
-        OpenColumnSettings { target, tab }
-    }
-
-    pub(super) fn on_open_settings_with_column(
-        &mut self,
-        ctx: &Context<Self>,
-        target: ColumnSettingsTarget,
-    ) -> bool {
-        if self.settings_open {
-            self.on_open_column_settings(ctx, Some(target), None, false)
-        } else {
-            self.init_toggle_settings_task(ctx, Some(true), true, None, Some(target));
-            false
-        }
-    }
-
-    pub(super) fn on_open_column_settings(
-        &mut self,
-        ctx: &Context<Self>,
-        target: Option<ColumnSettingsTarget>,
-        sender: Option<Sender<()>>,
-        toggle: bool,
-    ) -> bool {
-        let open_column_settings = ctx.props().presentation.get_open_column_settings();
-        if target == open_column_settings.target {
-            if toggle {
-                ctx.props().presentation.set_open_column_settings(None);
-            }
-        } else {
-            let open_column_settings = self.column_settings_for(target.clone());
-            ctx.props()
-                .presentation
-                .set_open_column_settings(Some(open_column_settings));
-
-            if target.is_some() {
-                self.settings_geometry.selected_tab = SelectedTab::Query;
-            }
-        }
-
-        if let Some(sender) = sender {
-            // I6: resolve on the render commit that applies this change (the
-            // shared `on_rendered` queue, drained in `rendered()` once fonts
-            // settle), not at message-handling time.
-            self.on_rendered.push(sender);
-        }
-
-        true
-    }
-
-    pub(super) fn on_column_settings_panel_auto_width(
-        &mut self,
-        ctx: &Context<Self>,
-        w: f64,
-    ) -> bool {
-        if w > self.settings_geometry.column_settings_auto_width {
-            self.settings_geometry.column_settings_auto_width = w;
-            if self.settings_geometry.column_settings_pinned {
-                self.resize_for_ratchet(ctx);
-            }
-
-            true
-        } else {
-            false
-        }
-    }
-
-    pub(super) fn on_toggle_column_settings_pin(&mut self, ctx: &Context<Self>) -> bool {
-        let is_pinned = self.settings_geometry.column_settings_pinned;
-        let delta_w = measure_column_settings_pin_delta(&ctx.props().elem, is_pinned);
-        if let Some(delta_w) = delta_w {
-            self.settings_geometry.column_settings_docked_width = Some(delta_w.abs());
-        }
-
-        self.presize_column_settings_shift(ctx, delta_w, ToggleColumnSettingsPinComplete);
-        false
-    }
-
-    pub(super) fn on_toggle_column_settings_pin_complete(&mut self, resolve: Sender<()>) -> bool {
-        self.settings_geometry.column_settings_pinned =
-            !self.settings_geometry.column_settings_pinned;
-        self.on_rendered.push(resolve);
-        true
-    }
-
-    /// Shared presize choreography for a column-settings geometry shift:
-    /// pre-size every visible panel by `delta_w` (`None` = no sweep, commit
-    /// only), send `commit_msg` to apply the deferred state on the render
-    /// commit, reveal the staged frames in that same paint, then reactively
-    /// finalize at the exact settled cells (I6).
-    fn presize_column_settings_shift(
-        &self,
-        ctx: &Context<Self>,
-        delta_w: Option<f64>,
-        commit_msg: fn(Sender<()>) -> super::msg::PerspectiveViewerMsg,
-    ) {
-        let workspace = ctx.props().workspace.clone();
-        let elem = ctx.props().elem.clone();
-        let callback = ctx.link().callback(commit_msg);
-        ApiFuture::spawn(async move {
-            let presents = match delta_w {
-                Some(delta_w) => presize_visible_panels_open(&workspace, &elem, delta_w, 0.0).await,
-                None => StagedPresents::default(),
-            };
-
-            let (notify, rendered) = channel::<()>();
-            callback.emit(notify);
-            rendered.await?;
-            presents.reveal();
-            resize_visible_panels(&workspace).await;
-            Ok(())
-        });
-    }
-
-    /// Whether the drawer renders for this `open_column_settings` snapshot
-    /// (the `render()` mount predicate). Sensitive to the session snapshot
-    /// too — `snapshots.rs` re-evaluates it across an `UpdateSession` apply,
-    /// which can invalidate the open column's locator (e.g. a drag
-    /// replacing it in `columns`) and unmount the drawer without any
-    /// `UpdateColumnSettings` traffic.
-    pub(super) fn is_column_settings_mounted(&self, ocs: &OpenColumnSettings) -> bool {
-        get_current_column_locator(
-            ocs,
-            &self.active_renderer,
-            &self.session_props.config,
-            &self.session_props.metadata,
-        )
-        .is_some()
-    }
-
-    /// The `open_column_settings` snapshot handler: mount/unmount of the
-    /// DOCKED drawer moves `#main_panel_container`'s flex box just like the
-    /// pin toggle — and no `before-resize` fires for it — so those
-    /// transitions defer the snapshot behind the presize choreography.
-    /// Floating transitions and in-place locator changes apply synchronously
-    /// as before, unless a deferred commit is in flight (they queue into the
-    /// latest-wins slot to preserve commit order).
-    pub(super) fn on_update_column_settings(
-        &mut self,
-        ctx: &Context<Self>,
-        ocs: OpenColumnSettings,
-    ) -> bool {
-        self.refresh_session_snapshot(ctx);
-        let effective = self
-            .settings_geometry
-            .column_settings_target
-            .as_ref()
-            .unwrap_or(&self.presentation_props.open_column_settings);
-        if ocs == *effective {
-            return false;
-        }
-
-        let was_mounted =
-            self.is_column_settings_mounted(&self.presentation_props.open_column_settings);
-        let will_mount = self.is_column_settings_mounted(&ocs);
-        let needs_presize =
-            self.settings_geometry.column_settings_pinned && was_mounted != will_mount;
-        if !needs_presize && !self.settings_geometry.column_settings_commit_pending {
-            self.presentation_props.open_column_settings = ocs;
-            return true;
-        }
-
-        self.settings_geometry.column_settings_target = Some(ocs);
-        if self.settings_geometry.column_settings_commit_pending {
-            return false;
-        }
-
-        self.settings_geometry.column_settings_commit_pending = true;
-        let delta_w = if !needs_presize {
-            None
-        } else if was_mounted {
-            // Unmounting - the docked drawer is still in the DOM, and its
-            // freed span is the same measurement as an unpin.
-            let delta = measure_column_settings_pin_delta(&ctx.props().elem, true);
-            if let Some(delta) = delta {
-                self.settings_geometry.column_settings_docked_width = Some(delta.abs());
-            }
-
-            delta
-        } else {
-            // Mounting directly into pinned mode - not yet in the DOM; the
-            // span cached at the last dock/unmount predicts the shrink.
-            self.settings_geometry.column_settings_docked_width
-        };
-
-        self.presize_column_settings_shift(ctx, delta_w, UpdateColumnSettingsCommit);
-        false
-    }
-
-    pub(super) fn on_update_column_settings_commit(&mut self, resolve: Sender<()>) -> bool {
-        self.settings_geometry.column_settings_commit_pending = false;
-        self.on_rendered.push(resolve);
-        if let Some(ocs) = self.settings_geometry.column_settings_target.take() {
-            self.presentation_props.open_column_settings = ocs;
-        }
-
-        true
-    }
-
-    pub(super) fn on_column_settings_tab_changed(
-        &mut self,
-        ctx: &Context<Self>,
-        tab: ColumnSettingsTab,
-    ) -> bool {
-        let mut open_column_settings = ctx.props().presentation.get_open_column_settings();
-        open_column_settings.tab.clone_from(&Some(tab));
-        ctx.props()
-            .presentation
-            .set_open_column_settings(Some(open_column_settings));
-        true
     }
 
     pub(super) fn on_toggle_debug(&mut self, _ctx: &Context<Self>) -> bool {

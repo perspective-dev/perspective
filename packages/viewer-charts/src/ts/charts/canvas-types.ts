@@ -26,5 +26,4 @@ export type Canvas2D = HTMLCanvasElement | OffscreenCanvas;
  * neither used by the chart render paths.
  */
 export type Context2D =
-    | CanvasRenderingContext2D
-    | OffscreenCanvasRenderingContext2D;
+    CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;

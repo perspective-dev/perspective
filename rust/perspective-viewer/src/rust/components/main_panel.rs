@@ -21,9 +21,14 @@
 //! - [`reconcile`] — the `rendered` layout reconcile + per-panel theme stamp.
 //! - [`render`] — the `view` (status bar, cells, tabs, menu).
 
+mod export_menus;
+mod panel_menu;
+mod panel_tab;
 mod presize;
 mod reconcile;
 mod render;
+mod render_warning;
+mod status_bar;
 mod update;
 
 pub mod msg;
@@ -35,8 +40,8 @@ use perspective_js::utils::JsValueSerdeExt;
 use wasm_bindgen::prelude::*;
 use yew::prelude::*;
 
-pub use self::msg::{MainPanelMsg, MenuOrigin, MenuRequest};
-use super::panel_menu::PanelCommand;
+use self::msg::{MainPanelMsg, MenuOrigin, MenuRequest};
+use crate::components::panel_command::PanelCommand;
 use crate::presentation::{Presentation, PresentationProps};
 use crate::queries::ResolvedCommands;
 use crate::renderer::*;
@@ -72,7 +77,7 @@ pub struct MainPanelProps {
     /// command the root executes (New/Duplicate/Reset/ToggleMaster/Close).
     /// Maximize/Restore are handled HERE (this component owns the layout
     /// element), and Export/Copy end-to-end by
-    /// [`PanelMenu`](super::panel_menu::PanelMenu) itself.
+    /// [`PanelMenu`](self::panel_menu::PanelMenu) itself.
     pub on_panel_command: Callback<(String, PanelCommand)>,
 
     /// Snapshots threaded from root.  Read for `has_table`, `title` here in
@@ -81,11 +86,29 @@ pub struct MainPanelProps {
     pub renderer_props: RendererProps,
     pub presentation_props: PresentationProps,
 
-    /// Derived from root: `settings_open && has_table_loaded`.
+    /// Derived from root: `settings_open && (has_table_loaded || is_empty)`.
     pub is_settings_open: bool,
 
-    /// Root-managed in-flight render counter (not engine state).
-    pub update_count: u32,
+    /// The element is an EMPTY STAGE (zero panels, no pending `load()`), which
+    /// switches the status bar to its empty-state chrome.
+    pub is_empty: bool,
+
+    /// Whether any `Client` is loaded (the status bar's "New" table menu).
+    /// A value snapshot so client registration re-renders the status bar.
+    pub has_clients: bool,
+
+    /// The workspace's aggregate status, threaded to `StatusBar`. At zero
+    /// panels this carries the element-level stage error.
+    pub status: crate::queries::WorkspaceStatus,
+
+    /// Whether the `StatusBar` renders the status indicator.
+    pub show_status: bool,
+
+    /// Whether the workspace panel is open, which keeps the `StatusBar` docked.
+    pub is_workspace_open: bool,
+
+    /// Fired when the status indicator is clicked.
+    pub on_status_click: Callback<()>,
 
     /// Ids of every layout panel, in order; one `<regular-layout>` cell is
     /// rendered per id. Drives re-render when panels are added/removed.
@@ -134,7 +157,11 @@ impl PartialEq for MainPanelProps {
             && self.renderer_props == rhs.renderer_props
             && self.presentation_props == rhs.presentation_props
             && self.is_settings_open == rhs.is_settings_open
-            && self.update_count == rhs.update_count
+            && self.is_empty == rhs.is_empty
+            && self.has_clients == rhs.has_clients
+            && self.status == rhs.status
+            && self.show_status == rhs.show_status
+            && self.is_workspace_open == rhs.is_workspace_open
             && self.panel_ids == rhs.panel_ids
             && self.panel_titles == rhs.panel_titles
             && self.panel_themes == rhs.panel_themes
@@ -226,10 +253,14 @@ pub struct MainPanel {
     /// update — every panel starts visible.
     hidden_tabs: HashSet<String>,
 
+    /// The visible panel of the layout's top-left stack, recomputed with
+    /// `hidden_tabs`.
+    top_left_tab: Option<String>,
+
     /// Open context menu as `(client x, client y, target panel id)`; outer
     /// `None` when closed. A `None` *panel id* is the target-less menu (no
     /// active panel to resolve to — "New" only). Rendered as a
-    /// cursor-anchored [`PanelMenu`](super::panel_menu::PanelMenu) overlay.
+    /// cursor-anchored [`PanelMenu`](self::panel_menu::PanelMenu) overlay.
     context_menu: Option<(f64, f64, Option<String>)>,
 
     /// The custom commands of the open context menu.
@@ -400,6 +431,7 @@ impl Component for MainPanel {
             listener_target: None,
             drag: None,
             hidden_tabs: HashSet::new(),
+            top_left_tab: None,
             context_menu: None,
             context_menu_commands: PtrEqRc::default(),
             pending_menu: None,

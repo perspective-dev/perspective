@@ -31,11 +31,7 @@ import type { CellScalar } from "regular-table/dist/esm/types.js";
 import type { ColumnPathArea } from "../model/column_path_area.ts";
 
 export type EdgeState =
-    | "none"
-    | "full"
-    | "miter-start"
-    | "miter-end"
-    | "miter-both";
+    "none" | "full" | "miter-start" | "miter-end" | "miter-both";
 
 export interface CellBorders {
     top: EdgeState;

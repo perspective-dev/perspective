@@ -244,6 +244,23 @@ impl ReconnectCallback {
     }
 }
 
+/// Whether a [`Client`] can currently reach its `Server`.
+#[derive(Clone)]
+pub enum Connection {
+    Open,
+    Lost {
+        error: ClientError,
+        reconnect: Option<ReconnectCallback>,
+    },
+}
+
+impl Connection {
+    /// Whether requests can be sent.
+    pub fn is_open(&self) -> bool {
+        matches!(self, Self::Open)
+    }
+}
+
 /// An instance of a [`Client`] is a connection to a single
 /// `perspective_server::Server`, whether locally in-memory or remote over some
 /// transport like a WebSocket.
@@ -251,6 +268,7 @@ impl ReconnectCallback {
 pub struct Client {
     name: Arc<String>,
     features: Arc<Mutex<Option<Features>>>,
+    connection: Arc<std::sync::RwLock<Connection>>,
     send: SendCallback,
     id_gen: IDGen,
     subscriptions_errors: Subscriptions<OnErrorCallback>,
@@ -290,6 +308,7 @@ impl Client {
         Ok(Client {
             name: Arc::new(name),
             features: Arc::default(),
+            connection: Arc::new(std::sync::RwLock::new(Connection::Open)),
             id_gen: IDGen::default(),
             send,
             subscriptions: Subscriptions::default(),
@@ -313,6 +332,28 @@ impl Client {
 
     pub fn get_name(&self) -> &'_ str {
         self.name.as_str()
+    }
+
+    /// Whether this [`Client`] can currently reach its `Server`, and the error
+    /// and reconnect function of the loss when it cannot.
+    pub fn connection(&self) -> Connection {
+        self.connection
+            .read()
+            .unwrap_or_else(|x| x.into_inner())
+            .clone()
+    }
+
+    fn set_connection(&self, connection: Connection) -> Connection {
+        let mut guard = self.connection.write().unwrap_or_else(|x| x.into_inner());
+
+        std::mem::replace(&mut *guard, connection)
+    }
+
+    fn check_open(&self) -> ClientResult<()> {
+        match self.connection() {
+            Connection::Open => Ok(()),
+            Connection::Lost { error, .. } => Err(ClientError::TransportError(error.to_string())),
+        }
     }
 
     /// Handle a message from the external message queue.
@@ -351,7 +392,8 @@ impl Client {
         Ok(false)
     }
 
-    /// Handle an exception from the underlying transport.
+    /// Handle an exception from the underlying transport, after which every
+    /// request is rejected until `reconnect` succeeds.
     pub async fn handle_error<T, U>(
         &self,
         message: ClientError,
@@ -361,20 +403,38 @@ impl Client {
         T: Fn() -> U + Clone + Send + Sync + 'static,
         U: Future<Output = ClientResult<()>>,
     {
+        let reconnect = reconnect.map(|f| {
+            let connection = Arc::downgrade(&self.connection);
+            ReconnectCallback(Arc::new(move || {
+                clone!(f, connection);
+                Box::pin(async move {
+                    f().await?;
+                    if let Some(connection) = connection.upgrade() {
+                        *connection.write().unwrap_or_else(|x| x.into_inner()) = Connection::Open;
+                    }
+
+                    Ok(())
+                }) as LocalBoxFuture<'static, _>
+            }))
+        });
+
+        let previous = self.set_connection(Connection::Lost {
+            error: message.clone(),
+            reconnect: reconnect.clone(),
+        });
+
+        if !previous.is_open() {
+            return Ok(());
+        }
+
         let subs = self.subscriptions_errors.read().await;
-        let tasks = join_all(subs.values().map(|callback| {
-            callback(
-                message.clone(),
-                reconnect.clone().map(move |f| {
-                    ReconnectCallback(Arc::new(move || {
-                        clone!(f);
-                        Box::pin(async move { Ok(f().await?) }) as LocalBoxFuture<'static, _>
-                    }))
-                }),
-            )
-        }));
+        let tasks = join_all(
+            subs.values()
+                .map(|callback| callback(message.clone(), reconnect.clone())),
+        );
 
         tasks.await.into_iter().collect::<Result<(), _>>()?;
+        drop(subs);
         self.close_and_error_subscriptions(&message).await
     }
 
@@ -444,6 +504,7 @@ impl Client {
         msg: &Request,
         on_update: Box<dyn FnOnce(Response) -> ClientResult<()> + Send + Sync + 'static>,
     ) -> ClientResult<()> {
+        self.check_open()?;
         self.subscriptions_once
             .write()
             .await
@@ -463,6 +524,7 @@ impl Client {
         T: Fn(Response) -> U + Send + Sync + 'static,
         U: Future<Output = Result<(), ClientError>> + Send + 'static,
     {
+        self.check_open()?;
         self.subscriptions
             .write()
             .await
@@ -937,5 +999,91 @@ impl Client {
             },
             resp => Err(resp.into()),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    use futures::executor::block_on;
+
+    use super::*;
+
+    fn counting_client() -> (Client, Arc<AtomicUsize>) {
+        let sent = Arc::new(AtomicUsize::new(0));
+        let client = Client::new_with_callback(None, {
+            clone!(sent);
+            move |_| {
+                sent.fetch_add(1, Ordering::SeqCst);
+                async { Ok(()) }
+            }
+        })
+        .unwrap();
+
+        (client, sent)
+    }
+
+    fn request(client: &Client) -> ClientResult<()> {
+        let msg = Request {
+            msg_id: client.gen_id(),
+            entity_id: "".to_owned(),
+            client_req: Some(ClientReq::GetFeaturesReq(GetFeaturesReq {})),
+        };
+
+        block_on(client.subscribe_once(&msg, Box::new(|_| Ok(()))))
+    }
+
+    #[test]
+    fn test_lost_client_rejects_without_sending() {
+        let (client, sent) = counting_client();
+        let reconnect = || async { Ok::<(), ClientError>(()) };
+        block_on(client.handle_error(ClientError::Unknown("closed".to_owned()), Some(reconnect)))
+            .unwrap();
+
+        assert!(!client.connection().is_open());
+        assert!(block_on(client.get_hosted_table_names()).is_err());
+        assert_eq!(sent.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn test_reconnect_reopens_client() {
+        let (client, sent) = counting_client();
+        let reconnect = || async { Ok::<(), ClientError>(()) };
+        block_on(client.handle_error(ClientError::Unknown("closed".to_owned()), Some(reconnect)))
+            .unwrap();
+
+        let Connection::Lost {
+            reconnect: Some(reconnect),
+            ..
+        } = client.connection()
+        else {
+            panic!("Expected a reconnectable lost connection");
+        };
+
+        block_on(reconnect()).unwrap();
+        assert!(client.connection().is_open());
+        request(&client).unwrap();
+        assert_eq!(sent.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn test_on_error_fires_once_per_loss() {
+        let (client, _) = counting_client();
+        let fired = Arc::new(AtomicUsize::new(0));
+        block_on(client.on_error({
+            clone!(fired);
+            move |_, _| {
+                fired.fetch_add(1, Ordering::SeqCst);
+                async { Ok::<(), ClientError>(()) }
+            }
+        }))
+        .unwrap();
+
+        let none = None::<fn() -> futures::future::Ready<ClientResult<()>>>;
+        block_on(client.handle_error(ClientError::Unknown("a".to_owned()), none)).unwrap();
+        block_on(client.handle_error(ClientError::Unknown("b".to_owned()), none)).unwrap();
+        assert_eq!(fired.load(Ordering::SeqCst), 1);
+        assert!(request(&client).is_err());
     }
 }

@@ -714,11 +714,7 @@ export class SeriesChart extends CategoricalYChart {
             dateModifiers: this._columnDateModifiers,
             columnsConfig: this._columnsConfig,
             defaultChartType: this._defaultChartType as
-                | "bar"
-                | "line"
-                | "scatter"
-                | "area"
-                | undefined,
+                "bar" | "line" | "scatter" | "area" | undefined,
             autoAltYAxis: this._pluginConfig.auto_alt_y_axis,
             bandInnerFrac: this._pluginConfig.band_inner_frac,
             barInnerPad: this._pluginConfig.bar_inner_pad,

@@ -1,0 +1,230 @@
+/* ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+ * ┃ ██████ ██████ ██████       █      █      █      █      █ █▄  ▀███ █       ┃
+ * ┃ ▄▄▄▄▄█ █▄▄▄▄▄ ▄▄▄▄▄█  ▀▀▀▀▀█▀▀▀▀▀ █ ▀▀▀▀▀█ ████████▌▐███ ███▄  ▀█ █ ▀▀▀▀▀ ┃
+ * ┃ █▀▀▀▀▀ █▀▀▀▀▀ █▀██▀▀ ▄▄▄▄▄ █ ▄▄▄▄▄█ ▄▄▄▄▄█ ████████▌▐███ █████▄   █ ▄▄▄▄▄ ┃
+ * ┃ █      ██████ █  ▀█▄       █ ██████      █      ███▌▐███ ███████▄ █       ┃
+ * ┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫
+ * ┃ Copyright (c) 2017, the Perspective Authors.                              ┃
+ * ┃ ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌ ┃
+ * ┃ This file is part of the Perspective library, distributed under the terms ┃
+ * ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
+ * ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+ */
+
+:host {
+    #status_bar {
+        .section {
+            display: flex;
+            align-items: center;
+            pointer-events: none;
+        }
+
+        .section > * {
+            pointer-events: all;
+        }
+
+        span#status {
+            background-repeat: no-repeat;
+            background-color: var(--psp--color);
+            mask-size: contain;
+            mask-repeat: no-repeat;
+            mask-position: center;
+            pointer-events: none;
+            image-rendering: pixelated;
+            margin: 0 5px;
+        }
+
+        /* span#status_updating */
+
+        span#status.loading {
+            image-rendering: pixelated;
+            mask-image: var(--psp-icon--downloading--mask-image);
+            -webkit-mask-image: var(--psp-icon--downloading--mask-image);
+            &:before {
+                visibility: hidden;
+                content: var(--psp-icon--downloading--mask-image);
+                line-height: 0;
+            }
+        }
+
+        span#status.uninitialized {
+            background-color: transparent;
+        }
+
+        span#status.pending {
+            background-color: var(--psp-inactive--color);
+            mask-image: var(--psp-icon--status-pending--mask-image);
+            -webkit-mask-image: var(--psp-icon--status-pending--mask-image);
+            &:before {
+                visibility: hidden;
+                content: var(--psp-icon--status-pending--mask-image);
+                line-height: 0;
+            }
+        }
+
+        span#status.connected,
+        span#status.updating {
+            mask-image: var(--psp-icon--status-ok--mask-image);
+            -webkit-mask-image: var(--psp-icon--status-ok--mask-image);
+            &:before {
+                visibility: hidden;
+                content: var(--psp-icon--status-ok--mask-image);
+                line-height: 0;
+            }
+        }
+
+        div#status_reconnect {
+            z-index: 2;
+            display: var(--status-indicator--display, flex);
+            align-items: center;
+            border-radius: 3px;
+            margin: 0;
+            height: auto;
+            border: 1px solid
+                var(--psp-status-icon--ok--border-color, transparent);
+            cursor: var(--psp-status-icon--ok--cursor, pointer);
+            pointer-events: var(--psp-status-icon--pointer-events, all);
+
+            &::before {
+                content: "";
+                position: absolute;
+                z-index: -1;
+                top: 0;
+                bottom: 0;
+                left: 0;
+                width: var(--psp-status-bar--height, 38px);
+                border-top-left-radius: var(--psp-status-bar--border-radius);
+                border-bottom-left-radius: var(--psp-status-bar--border-radius);
+            }
+
+            &:hover::before {
+                background-color: var(
+                    --psp-status-icon--ok-hover--background-color,
+                    transparent
+                );
+            }
+
+            &:hover {
+                border-color: var(
+                    --psp-status-icon--ok-hover--border-color,
+                    transparent
+                );
+                span#status {
+                    background-color: var(
+                        --psp-status-icon--ok-hover--color,
+                        var(--psp--color)
+                    );
+                }
+            }
+
+            &.errored {
+                pointer-events: all;
+                display: flex;
+                cursor: pointer;
+            }
+
+            span#status.errored {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                height: 20px;
+                width: 20px;
+                border-radius: 10px;
+                color: var(--psp--background-color);
+                &:before {
+                    content: "!";
+                }
+            }
+        }
+
+        /* Status bar status icon animations */
+        span#status_updating {
+            position: absolute;
+            display: inline-flex;
+            margin: 0 5px;
+            opacity: 0;
+            background-repeat: no-repeat;
+            background-color: var(--psp--color);
+            -webkit-mask-size: cover;
+            mask-size: cover;
+            pointer-events: none;
+            image-rendering: pixelated;
+            mask-image: var(--psp-icon--updating--mask-image);
+            -webkit-mask-image: var(--psp-icon--updating--mask-image);
+            &:before {
+                visibility: hidden;
+                content: var(--psp-icon--updating--mask-image);
+                line-height: 0;
+            }
+        }
+
+        span#status.updating {
+            animation-name: status-bar-updating-inverse;
+            animation-fill-mode: forwards;
+            animation-iteration-count: 1;
+            animation-duration: 0.3s;
+        }
+
+        span#status_updating.updating {
+            animation-name: status-bar-updating;
+            animation-fill-mode: forwards;
+            animation-iteration-count: 1;
+            animation-duration: 0.3s;
+        }
+    }
+}
+
+:host {
+    #status_bar div#status_reconnect:hover {
+        span#status {
+            animation: none;
+            opacity: 1;
+            mask-image: var(--psp-icon--drawer-tab-inverted--mask-image);
+            -webkit-mask-image: var(
+                --psp-icon--drawer-tab-inverted--mask-image
+            );
+            transform: scaleX(-1);
+        }
+
+        span#status.errored {
+            border-radius: 0;
+
+            &:before {
+                visibility: hidden;
+            }
+        }
+
+        span#status_updating {
+            animation: none;
+            opacity: 0;
+        }
+    }
+}
+
+@keyframes status-bar-updating {
+    0% {
+        opacity: 0;
+    }
+
+    99% {
+        opacity: 0;
+    }
+
+    100% {
+        opacity: 1;
+    }
+}
+
+@keyframes status-bar-updating-inverse {
+    0% {
+        opacity: 1;
+    }
+
+    99% {
+        opacity: 1;
+    }
+
+    100% {
+        opacity: 0;
+    }
+}

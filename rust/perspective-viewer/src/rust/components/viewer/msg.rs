@@ -15,12 +15,16 @@
 //! domain modules ([`super::panels`], [`super::settings`], [`super::filters`],
 //! [`super::snapshots`]).
 
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use futures::channel::oneshot::Sender;
 use perspective_client::config::Filter;
 use perspective_js::utils::ApiResult;
 use wasm_bindgen::JsValue;
 
 use crate::components::settings_panel::SelectedTab;
+use crate::components::workspace_panel::WorkspaceTab;
 use crate::config::*;
 use crate::presentation::{
     ColumnSettingsTab, ColumnSettingsTarget, DragDropProps, PresentationProps,
@@ -53,6 +57,7 @@ pub struct MasterSelection {
 pub enum Divider {
     Settings,
     ColumnSettings,
+    Workspace,
 }
 
 impl Divider {
@@ -62,6 +67,7 @@ impl Divider {
         match self {
             Self::Settings => "#app_panel > .split-panel-child",
             Self::ColumnSettings => "#modal_panel > .split-panel-child",
+            Self::Workspace => "#workspace_drawer > .split-panel-child",
         }
     }
 }
@@ -72,8 +78,29 @@ pub enum PaneTarget {
     Natural,
 }
 
+/// The `toggleWorkspaceConfig()` completions a workspace-drawer commit
+/// resolves once its geometry has settled.
+pub type DrawerWaiters = Rc<RefCell<Vec<Sender<()>>>>;
+
 #[derive(Debug)]
 pub enum PerspectiveViewerMsg {
+    /// Toggle (or force) the workspace drawer open, resolving the `Sender`
+    /// once the change has rendered and its geometry has settled.
+    ToggleWorkspaceDrawer(Option<bool>, Option<Sender<()>>),
+
+    /// Toggle the workspace drawer between floating and docked.
+    ToggleWorkspaceDrawerPin,
+
+    /// Apply the newest deferred workspace-drawer state, resolving the
+    /// `Sender` on the render commit.
+    WorkspaceDrawerCommit(Sender<()>, DrawerWaiters),
+    WorkspaceTabChanged(WorkspaceTab),
+
+    /// The status indicator was clicked.
+    StatusIndicatorClicked,
+
+    /// Recompute the root's [`crate::queries::WorkspaceStatus`] snapshot.
+    UpdateWorkspaceStatus,
     ColumnSettingsPanelAutoWidth(f64),
     ToggleColumnSettingsPin,
     ToggleColumnSettingsPinComplete(Sender<()>),
@@ -236,11 +263,4 @@ pub enum PerspectiveViewerMsg {
     /// Refresh the root's render snapshot of the `Workspace`-owned global
     /// filter set (dispatched by its `filters_changed` PubSub).
     UpdateGlobalFilters,
-
-    /// The active panel's in-flight config-run count changed. LEVEL-
-    /// triggered: the payload is the ABSOLUTE count (RAII-settled — see
-    /// `Session::begin_config_run`), which the handler ASSIGNS to
-    /// `update_count`; there is no delta arithmetic to drift. Threaded to
-    /// `StatusIndicator` as the "updating" spinner.
-    UpdateInFlight(u32),
 }

@@ -17,7 +17,7 @@ import { describeDuckDB } from "./setup.js";
  * Arrow validity-bitmap test — bit `i` of the LSB-ordered bitfield.
  */
 function isValid(validity, i) {
-    return !validity || !!((validity[i >> 3] >> i % 8) & 1);
+    return !validity || !!((validity[i >> 3] >> (i % 8)) & 1);
 }
 
 describeDuckDB("typed_arrays", (getClient) => {

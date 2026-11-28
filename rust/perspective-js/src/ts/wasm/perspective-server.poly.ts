@@ -231,9 +231,12 @@ export default async function (obj: any) {
             if (is_memory64) {
                 ptime = ptime as bigint;
                 ptime = Number(ptime);
-                if (
-                    !(clk_id == 0 || clk_id == 1 || clk_id == 2 || clk_id == 3)
-                ) {
+                if (!(
+                    clk_id == 0 ||
+                    clk_id == 1 ||
+                    clk_id == 2 ||
+                    clk_id == 3
+                )) {
                     return 28;
                 }
                 var now;
@@ -251,9 +254,12 @@ export default async function (obj: any) {
             } else {
                 ptime = ptime as number;
                 ptime >>>= 0;
-                if (
-                    !(clk_id == 0 || clk_id == 1 || clk_id == 2 || clk_id == 3)
-                ) {
+                if (!(
+                    clk_id == 0 ||
+                    clk_id == 1 ||
+                    clk_id == 2 ||
+                    clk_id == 3
+                )) {
                     return 28;
                 }
 

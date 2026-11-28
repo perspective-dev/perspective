@@ -10,23 +10,31 @@
 // ┃ of the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). ┃
 // ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
+mod column_selector;
+mod debug_panel;
+mod empty_placeholder;
+mod plugin_selector;
+mod plugin_tab;
+
 use std::rc::Rc;
 
 use perspective_client::config::{ViewConfig, ViewConfigUpdate};
 use perspective_js::utils::ApiFuture;
 use yew::prelude::*;
 
-use super::column_selector::ColumnSelector;
-use super::plugin_selector::PluginSelector;
-use super::plugin_tab::PluginTab;
-use crate::components::debug_panel::DebugPanel;
+use self::column_selector::ColumnSelector;
+use self::debug_panel::DebugPanel;
+use self::empty_placeholder::EmptyPlaceholder;
+use self::plugin_selector::PluginSelector;
+use self::plugin_tab::PluginTab;
+use crate::components::error_dialog::ErrorDialog;
 use crate::config::{PluginStaticConfig, PluginUpdate};
 use crate::presentation::{ColumnLocator, ColumnSettingsTarget, OpenColumnSettings, Presentation};
-use crate::queries::{classify_column, is_pivot_column};
+use crate::queries::{StatusError, classify_column, is_pivot_column};
 use crate::renderer::*;
 use crate::session::column_defaults_update::*;
 use crate::session::*;
-use crate::tasks::update_plugin_and_render;
+use crate::tasks::{reconnect_client, update_plugin_and_render};
 use crate::ui::SidebarCloseButton;
 use crate::utils::*;
 use crate::workspace::Workspace;
@@ -34,6 +42,22 @@ use crate::workspace::Workspace;
 #[derive(Clone, Properties)]
 pub struct SettingsPanelProps {
     pub on_close: Callback<()>,
+
+    /// The element is an EMPTY STAGE (zero panels): `session`/`renderer`
+    /// are the detached empty engines. The plugin selector is browse-only
+    /// (a pick touches no engine state and does not affect the first
+    /// panel), and the table-bound tabs render [`EmptyPlaceholder`].
+    #[prop_or_default]
+    pub is_empty: bool,
+
+    /// The active panel's error, shown as a dialog above its Query and Style
+    /// tabs, which are inert while it is set.
+    #[prop_or_default]
+    pub error: Option<StatusError>,
+
+    /// Whether the dialog offers Reconnect for the active panel's `Client`.
+    #[prop_or_default]
+    pub can_reconnect: bool,
     pub on_resize: Rc<PubSub<()>>,
     pub on_select_column: Callback<Option<ColumnSettingsTarget>>,
     pub on_debug: Callback<()>,
@@ -114,6 +138,9 @@ pub struct SettingsPanelProps {
 impl PartialEq for SettingsPanelProps {
     fn eq(&self, rhs: &Self) -> bool {
         self.is_debug == rhs.is_debug
+            && self.is_empty == rhs.is_empty
+            && self.error == rhs.error
+            && self.can_reconnect == rhs.can_reconnect
             && self.plugin_name == rhs.plugin_name
             && self.available_plugins == rhs.available_plugins
             && self.has_table == rhs.has_table
@@ -138,11 +165,6 @@ pub enum SelectedTab {
     Query,
     Plugin,
     Debug,
-
-    /// The embedded LLM agent's chat panel. The variant exists in every
-    /// build; its tab button and body render only under the `llm-agent`
-    /// feature, and only once `agentConfig()` has been called.
-    Chat,
 }
 
 #[function_component]
@@ -153,6 +175,28 @@ pub fn SettingsPanel(props: &SettingsPanelProps) -> Html {
         session,
         ..
     } = &props;
+
+    let error = props.error.clone().filter(|_| !props.is_empty);
+    let on_reconnect = props.can_reconnect.then(|| {
+        let session = session.clone();
+        let workspace = props.workspace.clone();
+        let presentation = presentation.clone();
+        Callback::from(move |()| {
+            let Some(client) = session.get_client() else {
+                return;
+            };
+
+            let name = client.get_name().to_owned();
+            let workspace = workspace.clone();
+            let presentation = presentation.clone();
+            let effect = workspace.effects().guard();
+            ApiFuture::spawn(async move {
+                let _effect = effect;
+                let _ = reconnect_client(&workspace, &presentation, &name).await;
+                Ok(())
+            });
+        })
+    });
 
     let selected_column = {
         let config = &props.view_config;
@@ -178,8 +222,25 @@ pub fn SettingsPanel(props: &SettingsPanelProps) -> Html {
             })
     };
 
-    let plugin_name = props.plugin_name.clone();
+    // Empty stage: a UI-only plugin pick, shown by the selector but never
+    // applied to any engine — the first panel still draws its default
+    // plugin. Discarded whenever the element enters or leaves the empty
+    // stage.
+    let empty_pick = use_state_eq(|| None::<String>);
+    {
+        let empty_pick = empty_pick.clone();
+        use_effect_with(props.is_empty, move |_| empty_pick.set(None));
+    }
+
     let available_plugins = props.available_plugins.clone();
+    let plugin_name = if props.is_empty {
+        (*empty_pick)
+            .clone()
+            .or_else(|| available_plugins.first().cloned())
+    } else {
+        props.plugin_name.clone()
+    };
+
     let selected = props.selected_tab;
 
     // Shared trap-door width across tabs. Each tab subtree measures its
@@ -195,7 +256,18 @@ pub fn SettingsPanel(props: &SettingsPanelProps) -> Html {
         clone!(renderer, session, presentation);
         let session_metadata = props.metadata.clone();
         let view_config = props.view_config.clone();
+        let is_empty = props.is_empty;
+        let empty_pick = empty_pick.clone();
         Callback::from(move |plugin_name: String| {
+            // Empty stage: browse-only. Never touch the empty renderer —
+            // selecting a plugin there before the real plugins register
+            // pins its store to `Debug` — and there is no table whose
+            // features the rollup defaults below would read.
+            if is_empty {
+                empty_pick.set(Some(plugin_name));
+                return;
+            }
+
             if session.is_errored() || renderer.failure().is_some() {
                 return;
             }
@@ -274,58 +346,21 @@ pub fn SettingsPanel(props: &SettingsPanelProps) -> Html {
         }
     };
 
-    // The chat tab is zero-affordance until `agentConfig()` is called; the
-    // subscription re-renders this panel when that happens (and as the
-    // transcript updates while the chat body is mounted).
-    #[cfg(feature = "llm-agent")]
-    let (chat_tab_button, chat_body) = {
-        let update = use_force_update();
-        let agent = presentation.agent.clone();
-        use_effect_with((), move |_| {
-            let sub = agent
-                .on_update
-                .add_notify_listener(&Callback::from(move |_| update.force_update()));
-
-            move || drop(sub)
-        });
-
-        let button = if presentation.agent.is_configured() {
-            let on_select_column = props.on_select_column.clone();
-            let set_chat = {
-                let on_select_tab = props.on_select_tab.clone();
-                Callback::from(move |_: PointerEvent| {
-                    on_select_tab.emit(SelectedTab::Chat);
-                    on_select_column.emit(None)
-                })
-            };
-
-            html! {
-                <div
-                    id="chat_tabbar_tab"
-                    class={tab_class(selected, SelectedTab::Chat)}
-                    onpointerdown={set_chat}
-                />
-            }
-        } else {
-            html! {}
-        };
-
-        let body = html! {
-            <crate::components::chat_panel::ChatPanel agent={presentation.agent.clone()} />
-        };
-
-        (button, body)
-    };
-
-    #[cfg(not(feature = "llm-agent"))]
-    let (chat_tab_button, chat_body) = (html! {}, html! {});
-
     let on_open_expr_panel = use_callback(props.on_select_column.clone(), |c, on_select| {
         on_select.emit(Some(c))
     });
 
     html! {
-        <div id="settings_panel" class="sidebar_column noselect split-panel orient-vertical">
+        <div
+            id="settings_panel"
+            class={classes!(
+                "sidebar_column",
+                "noselect",
+                "split-panel",
+                "orient-vertical",
+                error.is_some().then_some("errored")
+            )}
+        >
             if selected_column.is_none() {
                 <SidebarCloseButton
                     id="settings_close_button"
@@ -353,9 +388,15 @@ pub fn SettingsPanel(props: &SettingsPanelProps) -> Html {
                     class={tab_class(selected, SelectedTab::Debug)}
                     onpointerdown={set_debug}
                 />
-                { chat_tab_button }
             </div>
-            if selected == SelectedTab::Query {
+            if let Some(error) = error {
+                <ErrorDialog id="settings_panel_error" {error} {on_reconnect} />
+            }
+            if props.is_empty {
+                // Query/Plugin/Debug all read a panel's table, plugin
+                // schema or config, none of which exist at zero panels.
+                <EmptyPlaceholder />
+            } else if selected == SelectedTab::Query {
                 <ColumnSelector
                     on_resize={&props.on_resize}
                     {on_open_expr_panel}
@@ -387,8 +428,6 @@ pub fn SettingsPanel(props: &SettingsPanelProps) -> Html {
                 // initial_width={width}
                 // on_auto_width={on_auto_width.clone()}
                 />
-            } else if selected == SelectedTab::Chat {
-                { chat_body }
             } else {
                 <DebugPanel
                     {presentation}

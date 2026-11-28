@@ -346,8 +346,7 @@ export class ClickhouseHandler implements perspective.VirtualServerHandler {
     private ownEntities = new Set<string>();
     constructor(db: clickhouse.ClickHouseClient, mod?: typeof perspective) {
         mod ??= client_runtime()?.glue as unknown as
-            | typeof perspective
-            | undefined;
+            typeof perspective | undefined;
         if (mod === undefined) {
             throw new Error(
                 "perspective-js is not initialized yet: construct a ClickhouseHandler once <perspective-viewer> is ready or a Client exists, or pass the wasm module",

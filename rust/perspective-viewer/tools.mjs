@@ -357,80 +357,50 @@ function normalizeChunks(chunks) {
     return out;
 }
 
-// JSON Schemas for tool parameters, generated from the ts-rs `.d.ts` output
+// JSON Schemas (draft 2020-12) for tool parameters, emitted from the Rust
+// config types by `rust/metadata` (`generate_json_schemas`) into the cargo
+// target dir — an intermediate, read only here and bundled into
+// `dist/docs/perspective-docs.json`.
 const TOOL_SCHEMA_TYPES = [
-    ["ViewerConfigUpdate", "dist/ts-rs/ViewerConfigUpdate.d.ts"],
-    ["ViewerConfigInitial", "dist/ts-rs/ViewerConfigInitial.d.ts"],
-    ["WorkspaceConfigUpdate", "dist/ts-rs/WorkspaceConfigUpdate.d.ts"],
+    ["ViewerConfigUpdate", "../target/json_schema/ViewerConfigUpdate.json"],
+    ["ViewerConfigInitial", "../target/json_schema/ViewerConfigInitial.json"],
+    [
+        "WorkspaceConfigUpdate",
+        "../target/json_schema/WorkspaceConfigUpdate.json",
+    ],
 ];
 
-// Inline every definition whose GENERATED NAME is not a legible
-// identifier, replacing each `$ref` to it with the type itself.
-function inlineMangledDefinitions(schema) {
-    const defs = schema.definitions ?? {};
-    const mangled = new Map(
-        Object.entries(defs).filter(
-            ([name]) => !/^[A-Za-z_][A-Za-z0-9_]*$/.test(name),
-        ),
-    );
-
-    if (mangled.size === 0) {
-        return schema;
-    }
-
-    const walk = (node) => {
-        if (Array.isArray(node)) {
-            return node.map(walk);
-        }
-
-        if (!node || typeof node !== "object") {
-            return node;
-        }
-
-        const ref = node["$ref"];
-        if (typeof ref === "string" && ref.startsWith("#/definitions/")) {
-            const name = decodeURIComponent(ref.slice("#/definitions/".length));
-
-            if (mangled.has(name)) {
-                // Sibling keys (`description`) win over the inlined body.
-                const { $ref, ...rest } = node;
-                return {
-                    ...walk(JSON.parse(JSON.stringify(mangled.get(name)))),
-                    ...rest,
-                };
-            }
-        }
-
-        return Object.fromEntries(
-            Object.entries(node).map(([k, v]) => [k, walk(v)]),
-        );
-    };
-
-    const out = walk(schema);
-    for (const name of mangled.keys()) {
-        delete out.definitions[name];
-    }
-
-    return out;
-}
-
+// Read each tool schema and check it is valid draft 2020-12 — the draft the
+// Anthropic API enforces on tool `input_schema`, rejecting the WHOLE request
+// otherwise. `validateSchema` checks the schema against the 2020-12
+// meta-schema; `compile` additionally resolves every `$ref`. Formats are
+// annotations here (schemars emits e.g. `uint32`), so they are not validated.
 async function buildToolSchemas(missing) {
-    const { createGenerator } = await import("ts-json-schema-generator");
+    const { default: Ajv2020 } = await import("ajv/dist/2020.js");
     const schemas = {};
     for (const [type, path] of TOOL_SCHEMA_TYPES) {
         if (!fs.existsSync(path)) {
-            missing.push(`${path} (${type} tool schema)`);
+            missing.push(
+                `${path} (${type} tool schema; run the metadata build)`,
+            );
             continue;
         }
 
-        schemas[type] = inlineMangledDefinitions(
-            createGenerator({
-                path,
-                type,
-                skipTypeCheck: true,
-                topRef: true,
-            }).createSchema(type),
-        );
+        const schema = JSON.parse(fs.readFileSync(path, "utf8"));
+        const ajv = new Ajv2020({ strict: false, validateFormats: false });
+        if (!ajv.validateSchema(schema)) {
+            throw new Error(
+                `${path}: not a valid JSON Schema 2020-12: ${ajv.errorsText(ajv.errors)}`,
+            );
+        }
+
+        try {
+            ajv.compile(schema);
+        } catch (e) {
+            throw new Error(`${path}: ${e.message}`);
+        }
+
+        schemas[type] = schema;
     }
 
     return schemas;
@@ -1053,7 +1023,9 @@ function cemReturn(ts, checker, known, node) {
     return signature
         ? {
               type: cemType(
-                  checker.typeToString(signature.getReturnType()),
+                  checker.typeToString(
+                      checker.getReturnTypeOfSignature(signature),
+                  ),
                   known,
               ),
           }
@@ -1073,7 +1045,7 @@ function cemIsPublic(ts, member) {
         return false;
     }
 
-    const flags = ts.getCombinedModifierFlags(member);
+    const flags = member.modifierFlags;
     return !(flags & (ts.ModifierFlags.Private | ts.ModifierFlags.Protected));
 }
 
@@ -1094,8 +1066,7 @@ function cemMembers(
         const name = member.name.getText();
         const doc = cemDoc(member);
         const is_static =
-            force_static ||
-            !!(ts.getCombinedModifierFlags(member) & ts.ModifierFlags.Static);
+            force_static || !!(member.modifierFlags & ts.ModifierFlags.Static);
 
         const base = { name, privacy: "public" };
         if (is_static) {
@@ -1106,7 +1077,10 @@ function cemMembers(
             base.description = doc.description;
         }
 
-        if (ts.isMethodDeclaration(member) || ts.isMethodSignature(member)) {
+        if (
+            ts.isMethodDeclaration(member) ||
+            ts.isMethodSignatureDeclaration(member)
+        ) {
             const entry = { kind: "method", ...base };
             const parameters = cemParameters(
                 ts,
@@ -1130,14 +1104,17 @@ function cemMembers(
             }
 
             out.push(entry);
-        } else if (ts.isGetAccessor(member) || ts.isSetAccessor(member)) {
+        } else if (
+            ts.isGetAccessorDeclaration(member) ||
+            ts.isSetAccessorDeclaration(member)
+        ) {
             const existing = accessors.get(name);
             if (existing) {
                 delete existing.readonly;
                 continue;
             }
 
-            const type_node = ts.isGetAccessor(member)
+            const type_node = ts.isGetAccessorDeclaration(member)
                 ? member.type
                 : member.parameters[0]?.type;
 
@@ -1159,7 +1136,7 @@ function cemMembers(
             out.push(entry);
         } else if (
             ts.isPropertyDeclaration(member) ||
-            ts.isPropertySignature(member)
+            ts.isPropertySignatureDeclaration(member)
         ) {
             const entry = {
                 kind: "field",
@@ -1174,9 +1151,7 @@ function cemMembers(
                 ),
             };
 
-            if (
-                ts.getCombinedModifierFlags(member) & ts.ModifierFlags.Readonly
-            ) {
+            if (member.modifierFlags & ts.ModifierFlags.Readonly) {
                 entry.readonly = true;
             }
 
@@ -1268,7 +1243,7 @@ function cemVariable(ts, checker, known, { statement, declaration }, name) {
                 : checker.typeToString(
                       checker.getTypeAtLocation(declaration),
                       undefined,
-                      ts.TypeFormatFlags.NoTruncation,
+                      ts.NodeBuilderFlags.NoTruncation,
                   ),
             known,
         ),
@@ -1286,7 +1261,7 @@ function cemEvents(ts, checker, known, iface) {
     const seen = new Set();
     for (const member of iface.members) {
         if (
-            !ts.isMethodSignature(member) ||
+            !ts.isMethodSignatureDeclaration(member) ||
             member.name.getText() !== "addEventListener"
         ) {
             continue;
@@ -1362,23 +1337,32 @@ function cemValueExports(ts, entry) {
 export async function buildCustomElementsManifest(
     out_file = "dist/custom-elements.json",
 ) {
-    const ts = (await import("typescript")).default;
-    const config = ts.parseJsonConfigFileContent(
-        ts.readConfigFile("tsconfig.json", ts.sys.readFile).config,
-        ts.sys,
-        ".",
-    );
+    const { API, NodeBuilderFlags } = await import("typescript/unstable/sync");
+    const ts = {
+        ...(await import("typescript/unstable/ast")),
+        NodeBuilderFlags,
+    };
+    const config = path.resolve("tsconfig.json");
+    const api = new API({ cwd: process.cwd() });
+    try {
+        const snapshot = api.updateSnapshot({ openProjects: [config] });
+        const project = snapshot.getProject(config);
+        if (!project) {
+            throw new Error(`custom-elements.json: ${config} did not load`);
+        }
 
-    const program = ts.createProgram(
-        [
-            CEM_ENTRY,
-            CEM_WASM_DTS,
-            ...CEM_ELEMENTS.map((x) => x.statics?.file).filter(Boolean),
-        ],
-        { ...config.options, noEmit: true },
-    );
+        return writeCustomElementsManifest(
+            ts,
+            project.program,
+            project.checker,
+            out_file,
+        );
+    } finally {
+        api.close();
+    }
+}
 
-    const checker = program.getTypeChecker();
+function writeCustomElementsManifest(ts, program, checker, out_file) {
     const known = cemKnownTypes();
     const source = (file) => {
         const sf = program.getSourceFile(path.resolve(file));

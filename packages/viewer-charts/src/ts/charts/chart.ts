@@ -315,10 +315,7 @@ export interface PluginConfig {
      * baseline.
      */
     facet_mode:
-        | "grid"
-        | "overlay"
-        | "last_group_by_grid"
-        | "last_group_by_overlay";
+        "grid" | "overlay" | "last_group_by_grid" | "last_group_by_overlay";
 
     /**
      * Faceted-cartesian zoom routing. `"shared"` — one viewport across
@@ -571,10 +568,7 @@ export interface PluginConfig {
 }
 
 export type LegendAnchor =
-    | "top-left"
-    | "top-right"
-    | "bottom-left"
-    | "bottom-right";
+    "top-left" | "top-right" | "bottom-left" | "bottom-right";
 
 export type LegendSizeMode = "auto" | "fixed";
 

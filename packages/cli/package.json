@@ -47,7 +47,7 @@
         "@perspective-dev/viewer-charts": "workspace:~",
         "@perspective-dev/viewer-datagrid": "workspace:~",
         "commander": "catalog:",
-        "puppeteer": "catalog:"
+        "playwright-core": "catalog:"
     },
     "devDependencies": {
         "@perspective-dev/test": "workspace:^"

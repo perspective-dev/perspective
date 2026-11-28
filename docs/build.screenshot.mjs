@@ -44,7 +44,7 @@ async function screenshot(page, id, theme, { out, port }) {
     }
 
     await page.goto(`http://localhost:${port}/index.html`, {
-        waitUntil: "networkidle2",
+        waitUntil: "networkidle",
     });
 
     await page.evaluate(async () => {
@@ -101,11 +101,8 @@ async function screenshot(page, id, theme, { out, port }) {
 
 export async function screenshotTheme(page, ids, theme, { out, port }) {
     fs.mkdirSync(path.join(out, theme), { recursive: true });
-    await page.emulateMediaFeatures([
-        { name: "prefers-color-scheme", value: theme },
-    ]);
-
-    await page.setViewport(VIEWPORT);
+    await page.emulateMedia({ colorScheme: theme });
+    await page.setViewportSize(VIEWPORT);
     let wrote = 0;
     let failed = 0;
     for (const id of ids) {

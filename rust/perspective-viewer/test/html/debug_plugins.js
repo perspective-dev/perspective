@@ -281,10 +281,6 @@ class DebugDefaultsPlugin extends DebugStyledPlugin {
                     { value: "bar", label: "Bar" },
                 ],
             },
-            {
-                kind: "Symbols",
-                default: { keys: "row", values: ["circle", "square"] },
-            },
             { kind: "AggregateDepth" },
         ];
 

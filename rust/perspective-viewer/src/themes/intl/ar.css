@@ -20,6 +20,7 @@ perspective-viewer {
     --psp-label--all-columns--content: "كل الأعمدة";
     --psp-label--add-all-columns--content: "+ الكل";
     --psp-label--clear-columns--content: "مسح";
+    --psp-label--no-table--content: "لم يتم تحميل أي جدول";
     --psp-label--untitled--content: "بدون عنوان";
 
     --psp-plugin-name--datagrid--content: "شبكة البيانات";
@@ -62,6 +63,7 @@ perspective-viewer {
     --psp-label--new-from-panel--content: "جديد من لوحة";
     --psp-label--apply-button--content: "تطبيق";
     --psp-label--paste-button--content: "لصق";
+    --psp-label--formatted-button--content: "تنسيق";
     --psp-label--edit-mode-read-only--content: "للقراءة فقط";
     --psp-label--edit-mode-edit--content: "تحرير النص";
     --psp-label--edit-mode-select-row--content: "تحديد صف";
@@ -129,6 +131,23 @@ perspective-viewer {
     --psp-label--plugin-tab--content: "الإضافة";
     --psp-label--debug-tab--content: "JSON";
     --psp-label--chat-tab--content: "الدردشة";
+    --psp-label--tables-tab--content: "الجداول";
+    --psp-label--client-default--content: "افتراضي";
+    --psp-label--client-reconnect--content: "إعادة الاتصال";
+    --psp-label--client-retry--content: "إعادة المحاولة";
+    --psp-label--error-details--content: "التفاصيل";
+    --psp-label--tables-loading--content: "جارٍ تحميل الجداول";
+    --psp-label--tables-no-clients--content: "لا يوجد عملاء";
+    --psp-label--views--content: "العروض";
+    --psp-label--join-open--content: "ربط";
+    --psp-label--join-left--content: "الجدول الأيسر";
+    --psp-label--join-right--content: "الجدول الأيمن";
+    --psp-label--join-on--content: "على";
+    --psp-label--join-right-on--content: "على (الأيمن)";
+    --psp-label--join-type--content: "النوع";
+    --psp-label--join-name--content: "الاسم";
+    --psp-label--join-create--content: "إنشاء";
+    --psp-label--join-cancel--content: "إلغاء";
 
     --psp-label--chat-reasoning--content: "الاستدلال";
     --psp-label--chat-send--content: "إرسال";
@@ -182,7 +201,6 @@ perspective-viewer {
     --psp-label--grid-columns--content: "أعمدة الشبكة";
     --psp-label--grid-rows--content: "صفوف الشبكة";
     --psp-label--chart-type--content: "نوع الشكل";
-    --psp-label--new-panel-button--content: "جديد";
 
     --psp-label--auto-alt-y-axis--content: "محور Y تلقائي";
     --psp-label--facet-mode--content: "وضع التقسيم";

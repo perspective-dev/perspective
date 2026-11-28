@@ -12,8 +12,8 @@
 
 use yew::prelude::*;
 
-use super::save_settings::{SaveSettings, SaveSettingsProps};
-use crate::components::window_editor::{WindowEditor, WindowEditorProps};
+use crate::components::column_settings_sidebar::window_editor::{WindowEditor, WindowEditorProps};
+use crate::ui::{SaveSettings, SaveSettingsProps};
 
 #[derive(PartialEq, Properties, Clone)]
 pub struct WindowTabProps {

@@ -257,13 +257,25 @@ test.describe("llm-agent search_docs", () => {
         expect(Object.keys(config_props)).toContain("windows");
         expect(Object.keys(config_props)).toContain("columns_config");
         expect(Object.keys(config_props)).toContain("group_by");
-        expect(config_props.columns.type).toEqual("array");
-        for (const ref of JSON.stringify(params).match(
-            /#\/definitions\/[^"]+/g,
-        ) ?? []) {
-            const name = ref.slice("#/definitions/".length);
+        // `Option<Vec<_>>` is nullable in the generated schema.
+        expect([config_props.columns.type].flat()).toContain("array");
+
+        // Draft 2020-12, which Anthropic's API enforces on `input_schema`:
+        // tuples (`Sort`, `Filter`, ...) are `prefixItems`, never the
+        // draft-07 `items` array, and the root document's metadata stays
+        // out of the spliced `config` property.
+        const json = JSON.stringify(params);
+        expect(json).toContain('"prefixItems"');
+        expect(json).not.toMatch(/"items":\[/);
+        expect(params.properties.config["$schema"]).toBeUndefined();
+        expect(params.properties.config["$defs"]).toBeUndefined();
+
+        const refs = json.match(/#\/\$defs\/[^"]+/g) ?? [];
+        expect(refs.length).toBeGreaterThan(0);
+        for (const ref of refs) {
+            const name = ref.slice("#/$defs/".length);
             expect(name).not.toContain("%");
-            expect(params.definitions[name]).toBeDefined();
+            expect(params.$defs[name]).toBeDefined();
         }
 
         expect(result.system).toContain("search_docs");
@@ -375,12 +387,12 @@ test.describe("llm-agent search_docs", () => {
         expect(config_props).toContain("masters");
         expect(config_props).toContain("global_filters");
         expect(config_props).not.toContain("panels");
-        expect(params.definitions?.ViewerConfigInitial).toBeUndefined();
-        for (const ref of JSON.stringify(params).match(
-            /#\/definitions\/[^"]+/g,
-        ) ?? []) {
-            const name = ref.slice("#/definitions/".length);
-            expect(params.definitions[name]).toBeDefined();
+        expect(params.$defs?.ViewerConfigInitial).toBeUndefined();
+        const refs = JSON.stringify(params).match(/#\/\$defs\/[^"]+/g) ?? [];
+        expect(refs.length).toBeGreaterThan(0);
+        for (const ref of refs) {
+            const name = ref.slice("#/$defs/".length);
+            expect(params.$defs[name]).toBeDefined();
         }
     });
 

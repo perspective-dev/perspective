@@ -176,7 +176,9 @@ test.describe("Closing panels via the UI", () => {
         expect(active).toBe(two);
     });
 
-    test("the LAST panel's Close menu item is disabled", async ({ page }) => {
+    test("the LAST panel closes from its tab and closes the sidebar", async ({
+        page,
+    }) => {
         await restoreWorkspace(page, SPLIT_CONFIG);
         const [one, two] = await slotIds(page);
         await menuClose(page, one);
@@ -187,17 +189,46 @@ test.describe("Closing panels via the UI", () => {
                     .length === 1,
         );
 
-        // A lone panel can't be closed to zero from the UI (API-only).
-        await page
-            .locator(`perspective-viewer-plugin[slot="${two}"]`)
-            .click({ button: "right" });
-        const menu = page.locator("perspective-context-menu");
-        await menu.waitFor();
-        await expect(
-            menu.locator(".context-menu-item.disabled", { hasText: "Close" }),
-        ).toHaveCount(1);
+        await page.evaluate(async () => {
+            const viewer = document.querySelector("perspective-viewer")! as any;
+            await viewer.restore({ settings: true });
+        });
 
-        await page.keyboard.press("Escape");
+        await page
+            .locator(`perspective-viewer-tab[slot="tab-${two}"] .psp-tab-close`)
+            .click();
+
+        await page.waitForFunction(
+            () =>
+                // @ts-ignore
+                document.querySelector("perspective-viewer")!.getPanelNames()
+                    .length === 0,
+        );
+
+        await expect(
+            page.locator("perspective-viewer #settings_panel"),
+        ).toHaveCount(0);
+        await assertCoherent(page);
+    });
+
+    test("the LAST panel's Close menu item is enabled", async ({ page }) => {
+        await restoreWorkspace(page, SPLIT_CONFIG);
+        const [one, two] = await slotIds(page);
+        await menuClose(page, one);
+        await page.waitForFunction(
+            () =>
+                // @ts-ignore
+                document.querySelector("perspective-viewer")!.getPanelNames()
+                    .length === 1,
+        );
+
+        await menuClose(page, two);
+        await page.waitForFunction(
+            () =>
+                // @ts-ignore
+                document.querySelector("perspective-viewer")!.getPanelNames()
+                    .length === 0,
+        );
     });
 
     test("closing a stack's visible member reveals the survivor", async ({

@@ -12,239 +12,17 @@
 
 //! Engine → root wiring: the PubSub subscriptions and direct callbacks that
 //! reflect [`Session`]/[`Renderer`]/[`Presentation`] state into the root's
-//! value-semantic snapshots, plus the raw window/host DOM listeners the root
-//! owns (shift-key affordance, master/detail selection).
+//! value-semantic snapshots.
 
-use std::collections::HashMap;
-
-use perspective_client::config::{Filter, FilterTerm, Scalar};
-use perspective_js::utils::*;
-use wasm_bindgen::JsCast;
-use wasm_bindgen::prelude::*;
-use web_sys::{FocusEvent, KeyboardEvent};
 use yew::prelude::*;
 
 use super::PerspectiveViewer;
-use super::msg::MasterSelection;
 use super::msg::PerspectiveViewerMsg::{self, *};
 use crate::js::JsPerspectiveViewerPlugin;
 use crate::queries::*;
 use crate::renderer::*;
 use crate::session::*;
 use crate::utils::*;
-
-/// Window listeners that toggle the `.shift-active` class on the host element
-/// while the Shift key is held, making Shift-modified affordances (e.g.
-/// inactive column add, active column remove, status-bar reset) visually
-/// discoverable. Stored so the closures outlive `create`.
-pub(super) struct ShiftListeners {
-    elem: web_sys::HtmlElement,
-    keydown: Closure<dyn FnMut(KeyboardEvent)>,
-    keyup: Closure<dyn FnMut(KeyboardEvent)>,
-    blur: Closure<dyn FnMut(FocusEvent)>,
-}
-
-impl Drop for ShiftListeners {
-    fn drop(&mut self) {
-        let win = global::window();
-        let _ = win
-            .remove_event_listener_with_callback("keydown", self.keydown.as_ref().unchecked_ref());
-        let _ =
-            win.remove_event_listener_with_callback("keyup", self.keyup.as_ref().unchecked_ref());
-        let _ = win.remove_event_listener_with_callback("blur", self.blur.as_ref().unchecked_ref());
-        let _ = self.elem.class_list().remove_1("shift-active");
-        crate::utils::stamp_plugin_host_state_all(&self.elem);
-    }
-}
-
-pub(super) fn install_shift_listeners(elem: web_sys::HtmlElement) -> ShiftListeners {
-    let keydown = {
-        let elem = elem.clone();
-        Closure::wrap(Box::new(move |event: KeyboardEvent| {
-            if event.key() == "Shift" {
-                let _ = elem.class_list().add_1("shift-active");
-                crate::utils::stamp_plugin_host_state_all(&elem);
-            }
-        }) as Box<dyn FnMut(KeyboardEvent)>)
-    };
-
-    let keyup = {
-        let elem = elem.clone();
-        Closure::wrap(Box::new(move |event: KeyboardEvent| {
-            if event.key() == "Shift" {
-                let _ = elem.class_list().remove_1("shift-active");
-                crate::utils::stamp_plugin_host_state_all(&elem);
-            }
-        }) as Box<dyn FnMut(KeyboardEvent)>)
-    };
-
-    let blur = {
-        let elem = elem.clone();
-        Closure::wrap(Box::new(move |_: FocusEvent| {
-            let _ = elem.class_list().remove_1("shift-active");
-            crate::utils::stamp_plugin_host_state_all(&elem);
-        }) as Box<dyn FnMut(FocusEvent)>)
-    };
-
-    let win = global::window();
-    let _ = win.add_event_listener_with_callback("keydown", keydown.as_ref().unchecked_ref());
-    let _ = win.add_event_listener_with_callback("keyup", keyup.as_ref().unchecked_ref());
-    let _ = win.add_event_listener_with_callback("blur", blur.as_ref().unchecked_ref());
-
-    ShiftListeners {
-        elem,
-        keydown,
-        keyup,
-        blur,
-    }
-}
-
-/// The `perspective-global-filter` host listener (master/detail): routes a
-/// master panel's selection state to
-/// [`PerspectiveViewerMsg::MasterContribution`] — `selected: true` REPLACES
-/// the panel's contribution with the event's filters, `selected: false`
-/// clears it. Kept alive on the root; attached once in `rendered`.
-pub(super) fn global_filter_listener(
-    ctx: &Context<PerspectiveViewer>,
-) -> Closure<dyn FnMut(web_sys::Event)> {
-    let cb = ctx
-        .link()
-        .callback(|(panel, selection)| PerspectiveViewerMsg::MasterContribution(panel, selection));
-
-    Closure::wrap(Box::new(move |event: web_sys::Event| {
-        // `PerspectiveSelectDetail` exposes `selected`/`insertFilters` as
-        // prototype *getters*; struct deserialization reads each field by
-        // named property access (not own-key enumeration), so the getters are
-        // invoked — a map target would see none of them. Field names mirror
-        // the detail EXACTLY — it mixes `insertFilters` (camel) with
-        // `column_names` (snake), so no `rename_all`.
-        #[derive(serde::Deserialize)]
-        struct SelectDetail {
-            // Only multi-panel selections (carrying a source `panel` id) route.
-            panel: Option<String>,
-
-            #[serde(default)]
-            selected: bool,
-
-            #[serde(default, rename = "insertFilters")]
-            insert_filters: Vec<Filter>,
-
-            #[serde(default)]
-            row: HashMap<String, serde_json::Value>,
-
-            #[serde(default)]
-            column_names: Vec<serde_json::Value>,
-        }
-
-        let Some(ce) = event.dyn_ref::<web_sys::CustomEvent>() else {
-            return;
-        };
-
-        let Ok(SelectDetail {
-            panel: Some(panel),
-            selected,
-            insert_filters,
-            row,
-            column_names,
-        }) = ce.detail().into_serde_ext()
-        else {
-            return;
-        };
-
-        let selection = selected.then(|| MasterSelection {
-            cell_fallback: cell_fallback(&row, &column_names),
-            filters: insert_filters,
-            clear_if_underivable: true,
-        });
-
-        cb.emit((panel, selection));
-    }) as Box<dyn FnMut(web_sys::Event)>)
-}
-
-/// The `perspective-click` host listener: a click on a MASTER panel is a
-/// selection too (chart bars, flat datagrids — plugins whose click carries
-/// the clicked datum but which have no select mode), routed as an
-/// always-`Some` [`PerspectiveViewerMsg::MasterContribution`]. Clicks have no
-/// deselect arm — deselection arrives via the `perspective-global-filter`
-/// listener or the bar's chip ×. Non-master panels' clicks are dropped by the
-/// handler's `is_master` guard, and the datagrid suppresses clicks entirely
-/// in its row-select mode so a select/deselect never races a click echo.
-pub(super) fn master_click_listener(
-    ctx: &Context<PerspectiveViewer>,
-) -> Closure<dyn FnMut(web_sys::Event)> {
-    let cb = ctx
-        .link()
-        .callback(|(panel, selection)| PerspectiveViewerMsg::MasterContribution(panel, selection));
-
-    Closure::wrap(Box::new(move |event: web_sys::Event| {
-        #[derive(serde::Deserialize)]
-        struct ClickConfig {
-            #[serde(default)]
-            filter: Vec<Filter>,
-        }
-
-        #[derive(serde::Deserialize)]
-        struct ClickDetail {
-            // Only multi-panel clicks (carrying a source `panel` id) route.
-            panel: Option<String>,
-
-            #[serde(default)]
-            config: Option<ClickConfig>,
-
-            #[serde(default)]
-            row: HashMap<String, serde_json::Value>,
-
-            #[serde(default)]
-            column_names: Vec<serde_json::Value>,
-        }
-
-        let Some(ce) = event.dyn_ref::<web_sys::CustomEvent>() else {
-            return;
-        };
-
-        let Ok(ClickDetail {
-            panel: Some(panel),
-            config,
-            row,
-            column_names,
-        }) = ce.detail().into_serde_ext()
-        else {
-            return;
-        };
-
-        let selection = MasterSelection {
-            cell_fallback: cell_fallback(&row, &column_names),
-            filters: config.map(|x| x.filter).unwrap_or_default(),
-            clear_if_underivable: false,
-        };
-
-        cb.emit((panel, Some(selection)));
-    }) as Box<dyn FnMut(web_sys::Event)>)
-}
-
-/// Synthesize the clicked-cell `[column, "==", value]` fallback clause from a
-/// select/click detail's `row` + `column_names` — the broadcast for masters
-/// whose events carry no derivable filters (e.g. a FLAT datagrid, whose rows
-/// have no group-by path). The first real (non-`__`-internal, string-named)
-/// column with a scalar value in the row wins.
-fn cell_fallback(
-    row: &HashMap<String, serde_json::Value>,
-    column_names: &[serde_json::Value],
-) -> Option<Filter> {
-    let column = column_names
-        .iter()
-        .filter_map(|x| x.as_str())
-        .find(|x| !x.starts_with("__"))?;
-
-    let term = match row.get(column)? {
-        serde_json::Value::Bool(x) => Scalar::Bool(*x),
-        serde_json::Value::Number(x) => Scalar::Float(x.as_f64()?),
-        serde_json::Value::String(x) => Scalar::String(x.clone()),
-        _ => return None,
-    };
-
-    Some(Filter::new(column, "==", FilterTerm::Scalar(term)))
-}
 
 /// Subscribe to *every* panel's `title_changed` so a title change on any panel
 /// (not just the active one — e.g. a non-active panel restored via
@@ -264,6 +42,28 @@ pub(super) fn subscribe_panel_titles(ctx: &Context<PerspectiveViewer>) -> Vec<Su
             [
                 p.session.title_changed.add_notify_listener(&cb),
                 p.session.table_loaded.add_notify_listener(&cb),
+            ]
+        })
+        .collect()
+}
+
+/// One status subscription set per panel, feeding the root's
+/// [`crate::queries::WorkspaceStatus`] snapshot.
+pub(super) fn subscribe_panel_status(ctx: &Context<PerspectiveViewer>) -> Vec<Subscription> {
+    let cb = ctx.link().callback(|_| UpdateWorkspaceStatus);
+    ctx.props()
+        .workspace
+        .panels()
+        .into_iter()
+        .flat_map(|p| {
+            [
+                p.session.table_loaded.add_notify_listener(&cb),
+                p.session.table_unloaded.add_notify_listener(&cb),
+                p.session.table_errored.add_notify_listener(&cb),
+                p.session.commit_reconciled.add_notify_listener(&cb),
+                p.session.stats_changed.add_notify_listener(&cb),
+                p.session.config_runs.changed().add_notify_listener(&cb),
+                p.renderer.failure_changed.add_notify_listener(&cb),
             ]
         })
         .collect()
@@ -289,11 +89,7 @@ pub(super) fn create_active_subscriptions(
         let sub3 = session.commit_reconciled.add_notify_listener(&cb);
         let sub4 = session.view_config_changed.add_notify_listener(&cb);
         let sub5 = session.title_changed.add_notify_listener(&cb);
-        let sub6 = session
-            .config_runs
-            .changed()
-            .add_listener(ctx.link().callback(UpdateInFlight));
-
+        let sub6 = session.table_errored.add_notify_listener(&cb);
         let sub7 = session.column_stats_changed.add_notify_listener(&cb);
         vec![sub1, sub2, sub3, sub4, sub5, sub6, sub7]
     };
@@ -334,7 +130,13 @@ pub(super) fn create_active_subscriptions(
             .config_defaults_changed
             .add_listener(cb_config_defaults);
 
-        vec![sub1, sub2, sub3, sub4]
+        let cb_failure = ctx.link().callback({
+            let renderer = renderer.clone();
+            move |()| UpdateRenderer(Box::new(renderer.to_props(None)))
+        });
+
+        let sub5 = renderer.failure_changed.add_listener(cb_failure);
+        vec![sub1, sub2, sub3, sub4, sub5]
     };
 
     let mut subscriptions = Vec::new();
@@ -398,10 +200,24 @@ pub(super) fn create_shared_subscriptions(ctx: &Context<PerspectiveViewer>) -> V
             .add_notify_listener(&cb)
     };
 
+    // Client registration, binding changes and the `Workspace`-owned stage
+    // error (shown at zero panels) all feed the aggregate status.
+    let status_subs = {
+        let cb = ctx.link().callback(|_: ()| UpdateWorkspaceStatus);
+        let workspace = &ctx.props().workspace;
+        [
+            workspace.client_registered().add_notify_listener(&cb),
+            workspace.client_state_changed().add_notify_listener(&cb),
+            workspace.bindings_changed().add_notify_listener(&cb),
+            workspace.stage_error_changed().add_notify_listener(&cb),
+        ]
+    };
+
     let mut subscriptions = Vec::new();
     subscriptions.extend(presentation_props_sub);
     subscriptions.push(filters_sub);
     subscriptions.push(staged_sub);
+    subscriptions.extend(status_subs);
     subscriptions
 }
 
@@ -421,16 +237,6 @@ pub(super) fn inject_active_callbacks(
             .callback(move |_: ()| UpdateSessionStats(s.has_table_cells(), s.has_table()));
 
         *session.on_stats_changed.borrow_mut() = Some(cb);
-    }
-
-    // Session: on_table_errored
-    {
-        let s = session.clone();
-        let cb = ctx
-            .link()
-            .callback(move |_: ()| UpdateSession(Box::new(s.to_props())));
-
-        *session.on_table_errored.borrow_mut() = Some(cb);
     }
 
     // Renderer: on_render_limits_changed (combines UpdateRenderer + column
@@ -459,24 +265,13 @@ pub(super) fn inject_active_callbacks(
 
         *renderer.on_render_limits_changed.borrow_mut() = Some(cb);
     }
-
-    {
-        let r = renderer.clone();
-        let cb = ctx
-            .link()
-            .callback(move |_: ()| UpdateRenderer(Box::new(r.to_props(None))));
-
-        *renderer.on_render_failure_changed.borrow_mut() = Some(cb);
-    }
 }
 
 /// Clear the active panel's session/renderer direct callbacks so a
 /// no-longer-active panel stops driving the root's snapshots.
 pub(super) fn clear_active_callbacks(session: &Session, renderer: &Renderer) {
     *session.on_stats_changed.borrow_mut() = None;
-    *session.on_table_errored.borrow_mut() = None;
     *renderer.on_render_limits_changed.borrow_mut() = None;
-    *renderer.on_render_failure_changed.borrow_mut() = None;
 }
 
 /// Inject element-level (shared) presentation callbacks. Created once at

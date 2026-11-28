@@ -495,9 +495,7 @@ export class WorkerRenderer {
     private _resolveTarget(mx: number, my: number): ZoomTarget | null {
         const chart = this.chartImpl as any;
         const facetGrid = chart?._facetGrid as
-            | { cells: { layout: PlotLayout }[] }
-            | null
-            | undefined;
+            { cells: { layout: PlotLayout }[] } | null | undefined;
         if (facetGrid) {
             for (let i = 0; i < facetGrid.cells.length; i++) {
                 const cell = facetGrid.cells[i];

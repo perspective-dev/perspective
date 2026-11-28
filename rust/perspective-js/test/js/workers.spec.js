@@ -77,9 +77,8 @@ test.describe("worker types", () => {
         );
 
         const result = await page.evaluate(async () => {
-            const perspective = await import(
-                "http://localhost:6598/node_modules/@perspective-dev/client/dist/esm/perspective.js"
-            );
+            const perspective =
+                await import("http://localhost:6598/node_modules/@perspective-dev/client/dist/esm/perspective.js");
 
             const wasm = fetch(
                 "http://localhost:6598/node_modules/@perspective-dev/client/dist/wasm/perspective-js.wasm",
@@ -109,9 +108,8 @@ test.describe("worker types", () => {
         const s = await page.evaluate(async () => {
             window.SharedWorker = undefined;
             window.ServiceWorker = undefined;
-            const perspective = await import(
-                "http://localhost:6598/node_modules/@perspective-dev/client/dist/esm/perspective.js"
-            );
+            const perspective =
+                await import("http://localhost:6598/node_modules/@perspective-dev/client/dist/esm/perspective.js");
 
             const wasm = fetch(
                 "http://localhost:6598/node_modules/@perspective-dev/client/dist/wasm/perspective-js.wasm",

@@ -137,44 +137,9 @@ export class ExpressionEditor {
 export class StyleTab {
     container: Locator;
     contents: Locator;
-    symbolsEditor: SymbolsEditor;
 
     constructor(parent: Locator) {
         this.container = parent.locator("#style-tab");
         this.contents = parent.locator(".style_contents");
-        this.symbolsEditor = new SymbolsEditor(this.container);
-    }
-}
-export class SymbolsEditor {
-    container: Locator;
-    pairsList: Locator;
-
-    constructor(parent: Locator) {
-        this.container = parent.locator("#attributes-symbols");
-        this.pairsList = this.container.locator("ul");
-    }
-    async getSymbolPairs() {
-        const names = await this.pairsList
-            .locator(".column_name")
-            .allInnerTexts();
-        const symbols = await this.pairsList
-            .locator("option[selected]")
-            .allInnerTexts();
-        const zipped: SymbolPair[] = [];
-        for (let i = 0; i < names.length; i++) {
-            zipped.push(new SymbolPair(names[i], symbols[i]));
-        }
-        return zipped;
-    }
-    async getPairsLength() {
-        return (await this.pairsList.locator("li").all()).length;
-    }
-}
-export class SymbolPair {
-    key: String;
-    value: String;
-    constructor(key: String, value: String) {
-        this.key = key;
-        this.value = value;
     }
 }

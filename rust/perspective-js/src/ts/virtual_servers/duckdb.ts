@@ -206,18 +206,16 @@ function duckdbTypeToPsp(name: string): ColumnType {
     // Everything else renders as text: `varchar`, `enum(...)` (which
     // arrives dictionary-encoded), `json`, `uuid`, `blob`, `interval`,
     // and the nested types.
-    if (
-        !(
-            name.startsWith("varchar") ||
-            name === "utf8" ||
-            name.startsWith("enum") ||
-            ["json", "uuid", "blob", "bit", "interval"].includes(name) ||
-            name.startsWith("struct") ||
-            name.startsWith("map") ||
-            name.startsWith("union") ||
-            name.endsWith("[]")
-        )
-    ) {
+    if (!(
+        name.startsWith("varchar") ||
+        name === "utf8" ||
+        name.startsWith("enum") ||
+        ["json", "uuid", "blob", "bit", "interval"].includes(name) ||
+        name.startsWith("struct") ||
+        name.startsWith("map") ||
+        name.startsWith("union") ||
+        name.endsWith("[]")
+    )) {
         // Unknown, not fatal - the column still renders, as text.
         console.warn(`Unknown type '${name}'`);
     }
@@ -273,8 +271,7 @@ export class DuckDBHandler implements perspective.VirtualServerHandler {
     private sqlBuilder: perspective.GenericSQLVirtualServerModel;
     constructor(db: duckdb.AsyncDuckDBConnection, mod?: typeof perspective) {
         mod ??= client_runtime()?.glue as unknown as
-            | typeof perspective
-            | undefined;
+            typeof perspective | undefined;
         if (mod === undefined) {
             throw new Error(
                 "perspective-js is not initialized yet: construct a DuckDBHandler once <perspective-viewer> is ready or a Client exists, or pass the wasm module",

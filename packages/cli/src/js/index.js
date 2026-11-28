@@ -15,7 +15,7 @@ import { read_stdin, open_browser } from "./utils.js";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { program } from "commander";
-import puppeteer from "puppeteer";
+import { chromium } from "playwright-core";
 import { createRequire } from "node:module";
 import * as url from "node:url";
 
@@ -94,9 +94,10 @@ export async function host(filename, options) {
         file = await read_stdin();
     }
     if (options.open) {
-        const browser = await puppeteer.launch({
+        const context = await chromium.launchPersistentContext("", {
+            channel: "chrome",
             headless: false,
-            defaultViewport: null,
+            viewport: null,
             args: [
                 "--incognito",
                 "--noerrdialogs",
@@ -112,11 +113,9 @@ export async function host(filename, options) {
             ],
         });
 
-        const pages = await browser.pages();
-
-        const page = pages[0];
+        const page = context.pages()[0];
         page.on("close", () => {
-            browser.close();
+            context.close();
             process.exit(0);
         });
     }

@@ -121,6 +121,7 @@ jobs:
                       rust/perspective-js/dist/ts-rs/
                       rust/perspective-viewer/src/ts/
                       rust/perspective-viewer/dist/ts-rs/
+                      rust/target/json_schema/
                       rust/perspective-python/LICENSE_THIRDPARTY_cargo.yml
 
     # ,-,---.       .    .   ,-_/              .---.               .

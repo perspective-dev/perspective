@@ -52,7 +52,9 @@ pub mod proto;
 
 pub mod utils;
 
-pub use crate::client::{Client, ClientHandler, Features, ReconnectCallback, SystemInfo};
+pub use crate::client::{
+    Client, ClientHandler, Connection, Features, ReconnectCallback, SystemInfo,
+};
 use crate::proto::HostedTable;
 pub use crate::proto::JoinType;
 pub use crate::session::{ProxySession, Session};

@@ -12,8 +12,10 @@
 
 use yew::{Html, Properties, function_component, html};
 
-use super::save_settings::{SaveSettings, SaveSettingsProps};
-use crate::components::expression_editor::{ExpressionEditor, ExpressionEditorProps};
+use crate::components::column_settings_sidebar::expression_editor::{
+    ExpressionEditor, ExpressionEditorProps,
+};
+use crate::ui::{SaveSettings, SaveSettingsProps};
 
 #[derive(PartialEq, Properties, Clone)]
 pub struct AttributesTabProps {

@@ -19,13 +19,17 @@
 //! pickers + maximize live in `MainPanel`/`PanelMenu`, which own the layout
 //! element.)
 
+mod column_settings;
+mod dividers;
 mod filters;
+mod listeners;
 mod msg;
 mod panels;
 mod render;
 mod settings;
 mod snapshots;
 mod wiring;
+mod workspace_drawer;
 
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -37,11 +41,14 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
 use yew::prelude::*;
 
+use self::listeners::*;
 pub use self::msg::PerspectiveViewerMsg;
 use self::msg::PerspectiveViewerMsg::*;
 use self::settings::SettingsGeometry;
 use self::wiring::*;
+use self::workspace_drawer::WorkspaceDrawer;
 use crate::presentation::{Presentation, PresentationProps};
+use crate::queries::{WorkspaceStatus, workspace_status};
 use crate::renderer::{RendererProps, *};
 use crate::session::{SessionProps, *};
 use crate::tasks::*;
@@ -80,6 +87,21 @@ pub struct PerspectiveViewer {
     /// Recreated when the panel set changes (`LayoutChanged`/`ClosePanel`).
     _title_subscriptions: Vec<Subscription>,
 
+    /// One status subscription set per panel, recreated with
+    /// `_title_subscriptions`.
+    _status_subscriptions: Vec<Subscription>,
+
+    /// Render snapshot of every panel's and `Client`'s status, assigned by
+    /// `UpdateWorkspaceStatus`.
+    workspace_status: WorkspaceStatus,
+
+    /// The workspace drawer's open/pinned state and geometry.
+    workspace_drawer: WorkspaceDrawer,
+
+    /// The capabilities the workspace drawer's JSON tab saves and restores
+    /// through.
+    host: WorkspaceHost,
+
     /// The active panel's engine handles — what the settings panel + status bar
     /// bind to. Re-targeted on `SetActivePanel`. Fall back to
     /// `empty_session`/`empty_renderer` when the element has zero panels.
@@ -110,6 +132,10 @@ pub struct PerspectiveViewer {
     /// this when non-empty.
     global_filters: Vec<Filter>,
 
+    /// Value-cached registry plugin names for the empty-stage plugin
+    /// selector (see `render::registry_plugin_names`).
+    registry_plugins: std::cell::RefCell<PtrEqRc<Vec<String>>>,
+
     /// The settings sidebar's geometry state (pane/drawer width overrides,
     /// divider presize pump, open-state deltas cache) — see
     /// [`settings::SettingsGeometry`].
@@ -122,12 +148,6 @@ pub struct PerspectiveViewer {
     renderer_props: RendererProps,
     presentation_props: PresentationProps,
     dragdrop_props: crate::presentation::DragDropProps,
-
-    /// The active panel's in-flight config-run count — a LEVEL-triggered
-    /// snapshot of `Session::config_runs` (RAII-settled; assigned by
-    /// `UpdateInFlight`, re-read on retarget). Threaded to
-    /// `StatusIndicator` as the "updating" spinner.
-    update_count: u32,
 
     /// Window listeners that toggle the `.shift-active` class on the host
     /// element while the Shift key is held, making Shift-modified affordances
@@ -193,9 +213,16 @@ impl Component for PerspectiveViewer {
             });
         }
 
+        let host = WorkspaceHost {
+            elem: elem.clone(),
+            presentation: ctx.props().presentation.clone(),
+            workspace: ctx.props().workspace.clone(),
+            dispatch: ctx.link().callback(|msg| msg),
+        };
+
         let shift_listeners = install_shift_listeners(elem);
-        let global_filter_listener = wiring::global_filter_listener(ctx);
-        let master_click_listener = wiring::master_click_listener(ctx);
+        let global_filter_listener = listeners::global_filter_listener(ctx);
+        let master_click_listener = listeners::master_click_listener(ctx);
 
         Self {
             _subscriptions: subscriptions,
@@ -204,6 +231,10 @@ impl Component for PerspectiveViewer {
             master_listeners_attached: false,
             _active_subscriptions: active_subscriptions,
             _title_subscriptions: subscribe_panel_titles(ctx),
+            _status_subscriptions: subscribe_panel_status(ctx),
+            workspace_status: workspace_status(&ctx.props().workspace),
+            workspace_drawer: Default::default(),
+            host,
             active_session,
             active_renderer,
             empty_session,
@@ -217,12 +248,12 @@ impl Component for PerspectiveViewer {
             settings_open: false,
             pending_closes: HashMap::new(),
             global_filters: Vec::new(),
+            registry_plugins: std::cell::RefCell::new(PtrEqRc::new(vec![])),
             settings_geometry: Default::default(),
             session_props,
             renderer_props,
             presentation_props,
             dragdrop_props: Default::default(),
-            update_count: 0,
             _shift_listeners: shift_listeners,
         }
     }
@@ -372,6 +403,17 @@ impl Component for PerspectiveViewer {
             ColumnSettingsTabChanged(tab) => self.on_column_settings_tab_changed(ctx, tab),
             ToggleDebug => self.on_toggle_debug(ctx),
 
+            // Workspace drawer (`workspace_drawer.rs`)
+            ToggleWorkspaceDrawer(force, resolve) => {
+                self.on_toggle_workspace_drawer(ctx, force, resolve)
+            },
+            ToggleWorkspaceDrawerPin => self.on_toggle_workspace_drawer_pin(ctx),
+            WorkspaceDrawerCommit(resolve, waiters) => {
+                self.on_workspace_drawer_commit(ctx, resolve, waiters)
+            },
+            WorkspaceTabChanged(tab) => self.on_workspace_tab_changed(tab),
+            StatusIndicatorClicked => self.on_status_indicator_clicked(ctx),
+
             // Value-semantic snapshot plumbing (`snapshots.rs`)
             UpdateSession(props) => self.on_update_session(ctx, *props),
             UpdateSessionStats(stats, has_table) => self.on_update_session_stats(stats, has_table),
@@ -383,7 +425,7 @@ impl Component for PerspectiveViewer {
             UpdateColumnSettings(ocs) => self.on_update_column_settings(ctx, *ocs),
             UpdateColumnSettingsCommit(resolve) => self.on_update_column_settings_commit(resolve),
             UpdateDragDrop(props) => self.on_update_dragdrop(*props),
-            UpdateInFlight(count) => self.on_update_in_flight(count),
+            UpdateWorkspaceStatus => self.on_update_workspace_status(ctx),
         }
     }
 

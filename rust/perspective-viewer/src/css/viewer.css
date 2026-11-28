@@ -130,6 +130,22 @@
         0 12.5px 0 -11.5px var(--psp-inactive--border-color);
 }
 
+/* EMPTY STAGE: the settings-sidebar placeholder standing in for a tab body
+   with nothing to show at zero panels (Query/Plugin/Debug — see
+   `EmptyPlaceholder`). The label is localizable (`themes/intl.css`). */
+:host .psp-empty-placeholder {
+    flex: 1 1 auto;
+    display: flex;
+    justify-content: center;
+    padding: 24px 12px;
+    color: var(--psp-inactive--color);
+    user-select: none;
+
+    &::before {
+        content: var(--psp-label--no-table--content, "No table loaded");
+    }
+}
+
 :host .sidebar_close_button {
     position: absolute;
     top: 0;
@@ -193,6 +209,18 @@
 :host #settings_close_button,
 :host #column_settings_close_button {
     left: -21px;
+}
+
+:host #workspace_close_button {
+    right: -21px;
+
+    .sidebar_close_button_inner {
+        border-radius: 0 5px 5px 0;
+    }
+
+    .sidebar_close_button_inner .icon {
+        transform: scaleX(-1);
+    }
 }
 
 :host #debug_close_button.sidebar_close_button .sidebar_close_button_inner {
@@ -316,6 +344,33 @@
         margin-right: -5px;
     }
 
+    #workspace_drawer {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 7;
+        overflow: hidden;
+        pointer-events: none;
+        & > * {
+            pointer-events: all;
+        }
+    }
+
+    #workspace_drawer.pinned {
+        position: static;
+        flex: 0 0 auto;
+        width: auto;
+        pointer-events: all;
+        overflow: visible;
+    }
+
+    #workspace_drawer > .split-panel-divider {
+        border-left: 1px solid var(--psp-inactive--color, #6e6e6e);
+        margin-right: -5px;
+    }
+
     #status_bar {
         height: var(--psp-status-bar--height, 38px);
     }
@@ -372,6 +427,20 @@
             height: 100%;
         }
 
+        /* The layout engine hosting the panels fills the container.
+
+           Panel separators: frames TILE their grid cells (no margin) and each
+           panel draws a 1px line on its LEFT and TOP edge only, so every
+           internal boundary gets exactly one line (owned by the panel to its
+           right/below, in THAT panel's theme). The lines are drawn by the
+           light-DOM plugin (`outline`, beside the body) and tab (`::before`,
+           along the titlebar) - not the frame, which the per-panel theme
+           rules can't reach. Borders and outlines (unlike box-shadows) are
+           snapped to whole device pixels at any DPR. The leading inset (-4px)
+           pushes the outermost left/top lines outside `#main_panel_container`'s
+           `overflow: hidden`, so the layout itself has no outer border; the
+           trailing inset (-3px) leaves the plugins the same ~1px outer gutter
+           on every side. */
         & regular-layout {
             position: absolute;
             inset: -4px -3px -3px -4px;
@@ -520,6 +589,18 @@
         }
     }
 
+    #settings_panel_error {
+        flex: 0 0 auto;
+        margin: 8px 8px 0 0;
+    }
+
+    #settings_panel.errored
+        > #settings_panel_error
+        ~ :not(.scroll-panel-auto-width, #debug-panel-overflow) {
+        pointer-events: none;
+        opacity: 0.5;
+    }
+
     #column_settings_sidebar .split-panel-divider {
         border-top: 1px solid var(--psp-inactive--color, #6e6e6e);
         border-bottom: 2px solid var(--psp-inactive--color, #6e6e6e);
@@ -599,7 +680,8 @@
         margin-left: -8px;
     }
 
-    #settings_tab_bar {
+    #settings_tab_bar,
+    #workspace_tab_bar {
         display: flex;
         &:after {
             content: " ";
@@ -686,7 +768,15 @@
         content: var(--psp-label--debug-tab--content, var(--psp-missing));
     }
 
-    #chat_tabbar_tab:before {
+    #workspace_tables_tab:before {
+        content: var(--psp-label--tables-tab--content, var(--psp-missing));
+    }
+
+    #workspace_json_tab:before {
+        content: var(--psp-label--debug-tab--content, var(--psp-missing));
+    }
+
+    #workspace_chat_tab:before {
         content: var(--psp-label--chat-tab--content, var(--psp-missing));
     }
 }
@@ -1072,12 +1162,38 @@
 
     #chat_badge {
         flex: 0 0 auto;
+        display: flex;
+        align-items: center;
+        gap: 8px;
         font-size: 0.66em;
         color: var(--psp-inactive--color, #6e6e6e);
-        overflow: hidden;
         white-space: nowrap;
-        text-overflow: ellipsis;
         margin-bottom: 6px;
+    }
+
+    #chat_badge_label {
+        flex: 0 1 auto;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    /* The translated "Docs" label: struck through until `docs` loads. */
+    #chat_docs_status {
+        flex: 0 0 auto;
+        text-decoration: line-through;
+    }
+
+    #chat_docs_status[data-loaded="true"] {
+        color: var(--psp-inactive--color);
+        text-decoration: none;
+    }
+
+    #chat_docs_status:before {
+        content: var(
+            --psp-label--chat-entitlement--read-docs--content,
+            var(--psp-missing)
+        );
     }
 }
 

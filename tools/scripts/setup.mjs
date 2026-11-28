@@ -101,7 +101,7 @@ const CONFIG = new Proxy(
 );
 
 const PROMPT_BUILD_MODE = {
-    type: "list",
+    type: "select",
     name: "PSP_BUILD_MODE",
     message: "Build mode?",
     default: CONFIG["PSP_DEBUG"]

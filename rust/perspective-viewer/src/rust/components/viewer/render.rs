@@ -16,7 +16,9 @@
 //! INVARIANT: the `SplitPanel` is ALWAYS rendered with `main_panel` as its
 //! last (flex-fill) pane — toggling the settings sidebar only adds/removes the
 //! leading pane, never reparents `main_panel` (a remount would tear down
-//! `<regular-layout>` + the plugin `<slot>`s).
+//! `<regular-layout>` + the plugin `<slot>`s). The children of
+//! `#main_column_container` are FULLY KEYED for the same reason: the
+//! workspace drawer mounts ahead of `main_panel`.
 
 use yew::prelude::*;
 
@@ -25,16 +27,38 @@ use super::msg::PerspectiveViewerMsg::*;
 use super::msg::{Divider, PaneTarget};
 use crate::components::column_settings_sidebar::ColumnSettingsPanel;
 use crate::components::main_panel::MainPanel;
-use crate::components::panel_menu::PanelCommand;
+use crate::components::panel_command::PanelCommand;
 use crate::components::settings_panel::SettingsPanel;
 use crate::components::style::StyleSurface;
+use crate::components::view_label::ViewLabel;
+use crate::components::workspace_panel::WorkspacePanel;
 use crate::config::SettingsUpdate;
 use crate::presentation::ColumnSettingsTarget;
 use crate::queries::*;
+use crate::renderer::{LocalKeyRcRefCellVecPluginRecordExt, PLUGIN_REGISTRY};
 use crate::session::TableLoadState;
 use crate::ui::{FontLoader, SplitPanel, StyleProvider};
+use crate::utils::PtrEqRc;
 
 impl PerspectiveViewer {
+    /// The registered plugin names, for the empty-stage plugin selector.
+    /// Cached by VALUE so an unchanged registry keeps the same `PtrEqRc`
+    /// (which compares by pointer) and does not re-render `SettingsPanel`.
+    fn registry_plugin_names(&self) -> PtrEqRc<Vec<String>> {
+        let names = PLUGIN_REGISTRY
+            .plugin_configs()
+            .iter()
+            .map(|c| c.name.clone())
+            .collect::<Vec<_>>();
+
+        let mut cached = self.registry_plugins.borrow_mut();
+        if **cached != names {
+            *cached = PtrEqRc::new(names);
+        }
+
+        cached.clone()
+    }
+
     pub(super) fn render(&self, ctx: &Context<Self>) -> Html {
         // The settings panel + status bar bind to the *active* panel's engines;
         // `presentation` is element-level (shared).
@@ -42,8 +66,12 @@ impl PerspectiveViewer {
         let renderer = &self.active_renderer;
         let session = &self.active_session;
 
+        // EMPTY STAGE: zero panels and no pending `load()`. The chrome binds
+        // the detached `empty_*` engines, which have no table — so the
+        // table-loaded gates below also admit this mode explicitly.
+        let is_empty = ctx.props().workspace.is_empty_stage();
         let is_settings_open = self.settings_open
-            && matches!(self.session_props.has_table, Some(TableLoadState::Loaded));
+            && (is_empty || matches!(self.session_props.has_table, Some(TableLoadState::Loaded)));
 
         let mut class = classes!();
         if !is_settings_open {
@@ -73,7 +101,14 @@ impl PerspectiveViewer {
 
         let selected_tab = self.presentation_props.open_column_settings.tab;
         let plugin_name = self.renderer_props.plugin_name.clone();
-        let available_plugins = self.renderer_props.available_plugins.clone();
+        // The empty renderer never selects a plugin (selecting before the
+        // real plugins register pins its store to `Debug`), so its props
+        // carry no plugin list — read the registry instead.
+        let available_plugins = if is_empty {
+            self.registry_plugin_names()
+        } else {
+            self.renderer_props.available_plugins.clone()
+        };
         let has_table = self.session_props.has_table.clone();
         let named_column_count = self.renderer_props.config.config_column_names.len();
 
@@ -82,10 +117,29 @@ impl PerspectiveViewer {
         let metadata = self.session_props.metadata.clone();
         let on_select_tab = ctx.link().callback(SettingsPanelTabChanged);
         let on_auto_width = ctx.link().callback(SettingsPanelAutoWidth);
+        let active_id = ctx.props().workspace.active_id();
+        let panel_error = active_id.as_ref().and_then(|id| {
+            self.workspace_status
+                .errored
+                .iter()
+                .find(|(x, _)| x == id)
+                .map(|(_, error)| error.clone())
+        });
+
+        let can_reconnect = active_id.as_ref().is_some_and(|id| {
+            self.workspace_status
+                .clients
+                .iter()
+                .any(|client| client.can_reconnect && client.panels.contains(id))
+        });
+
         let settings_panel = if is_settings_open {
             html! {
                 <SettingsPanel
                     on_close={on_close_settings}
+                    {is_empty}
+                    error={panel_error}
+                    {can_reconnect}
                     on_resize={&self.on_resize}
                     on_select_column={on_open_expr_panel}
                     is_debug={self.debug_open}
@@ -129,9 +183,12 @@ impl PerspectiveViewer {
         // on toggle, and the divider/width-override machinery is identical
         // in both modes.
         let is_pinned = self.settings_geometry.column_settings_pinned;
-        let column_settings_panel = html! {
-            if let Some(selected_column) = selected_column {
+        // No columns exist at zero panels; never mount the drawer there.
+        let selected_column = selected_column.filter(|_| !is_empty);
+        let column_settings_panel = selected_column.map(|selected_column| {
+            html! {
                 <SplitPanel
+                    key="column_settings"
                     id="modal_panel"
                     class={classes!(is_pinned.then_some("pinned"))}
                     reverse=true
@@ -166,11 +223,54 @@ impl PerspectiveViewer {
                     <></>
                 </SplitPanel>
             }
-        };
+        });
+
+        let drawer = self.workspace_drawer.shown;
+        let workspace_drawer = drawer.open.then(|| {
+            let workspace = &ctx.props().workspace;
+            let panels = workspace
+                .panels()
+                .into_iter()
+                .filter(|panel| panel.session.get_table().is_some())
+                .map(|panel| ViewLabel {
+                    id: panel.id.as_str().to_owned(),
+                    title: panel.session.get_title().filter(|t| !t.is_empty()),
+                    derivable: crate::tasks::can_derive_view(&panel.session, &panel.renderer),
+                })
+                .collect::<Vec<_>>();
+
+            html! {
+                <SplitPanel
+                    key="workspace"
+                    id="workspace_drawer"
+                    class={classes!(drawer.pinned.then_some("pinned"))}
+                    deferred={drawer.pinned}
+                    size={self.workspace_drawer.width_override}
+                    initial_size={self.workspace_drawer.width_override}
+                    on_reset={ctx.link().callback(|_| DividerMove(Divider::Workspace, PaneTarget::Natural))}
+                    on_resize={ctx.link().callback(|(x, _): (i32, i32)| DividerMove(Divider::Workspace, PaneTarget::Width(x)))}
+                    on_resize_finished={ctx.link().callback(|_| DividerFinish(Divider::Workspace))}
+                >
+                    <WorkspacePanel
+                        host={self.host.clone()}
+                        status={self.workspace_status.clone()}
+                        selected_tab={self.workspace_drawer.selected_tab}
+                        is_pinned={drawer.pinned}
+                        panels={std::rc::Rc::new(panels)}
+                        on_close={ctx.link().callback(|()| ToggleWorkspaceDrawer(Some(false), None))}
+                        on_toggle_pin={ctx.link().callback(|()| ToggleWorkspaceDrawerPin)}
+                        on_select_tab={ctx.link().callback(WorkspaceTabChanged)}
+                        on_derive_panel={ctx.link().callback(DerivePanel)}
+                    />
+                    <></>
+                </SplitPanel>
+            }
+        });
 
         let on_reset = ctx.link().callback(|all| ResetPanel(None, all, None));
         let main_panel = html! {
             <MainPanel
+                key="main"
                 {on_settings}
                 {on_reset}
                 on_activate_panel={ctx.link().callback(|id| SetActivePanel(id, None))}
@@ -203,7 +303,12 @@ impl PerspectiveViewer {
                 renderer_props={self.renderer_props.clone()}
                 presentation_props={self.presentation_props.clone()}
                 {is_settings_open}
-                update_count={self.update_count}
+                {is_empty}
+                has_clients={!ctx.props().workspace.clients().is_empty()}
+                status={self.workspace_status.clone()}
+                show_status={!drawer.open}
+                is_workspace_open={drawer.open}
+                on_status_click={ctx.link().callback(|()| StatusIndicatorClicked)}
                 panel_ids={ctx.props().workspace.panel_ids()}
                 panel_titles={ctx.props()
                     .workspace
@@ -265,8 +370,7 @@ impl PerspectiveViewer {
                         >
                             { settings_panel }
                             <div id="main_column_container">
-                                { main_panel }
-                                { column_settings_panel }
+                                { for workspace_drawer.into_iter().chain([main_panel]).chain(column_settings_panel) }
                             </div>
                         </SplitPanel>
                     </div>

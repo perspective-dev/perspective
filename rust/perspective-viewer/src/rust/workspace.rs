@@ -13,11 +13,11 @@
 //! The multi-panel model backing a single `<perspective-viewer>`.
 
 use std::cell::{Cell, RefCell};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 
-use perspective_client::Client;
 use perspective_client::config::Filter;
+use perspective_client::{Client, ClientError};
 
 use crate::config::{DerivedTableConfig, TableRef, UnknownKeys};
 use crate::derived::{DerivedRegistry, DerivedTable};
@@ -267,6 +267,25 @@ impl LayoutEmitter {
     }
 }
 
+/// A session-only join `Table` created from the workspace panel.
+#[derive(Clone)]
+pub struct JoinTable {
+    pub client: String,
+    pub left: String,
+    pub right: String,
+    pub table: perspective_client::Table,
+}
+
+/// The last answer a [`Client`] gave for its hosted `Table` names.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ClientListing {
+    /// The names last listed, kept through a later failure.
+    pub tables: Option<Vec<String>>,
+
+    /// Why the latest listing failed.
+    pub error: Option<String>,
+}
+
 /// The loaded-[`Client`]s registry and the default-client designation. The
 /// invariant "the default is always a registered client" holds in this one
 /// impl: every default assignment registers first, and removal clears both.
@@ -275,6 +294,11 @@ struct ClientRegistry {
     clients: Vec<Client>,
     default: Option<Client>,
     client_registered: Rc<PubSub<Client>>,
+    client_state_changed: Rc<PubSub<()>>,
+    listings: BTreeMap<String, ClientListing>,
+    losses: BTreeMap<String, ClientError>,
+    failures: BTreeMap<String, perspective_js::utils::ApiError>,
+    table_subs: Vec<(Client, u32)>,
 }
 
 impl ClientRegistry {
@@ -298,6 +322,9 @@ impl ClientRegistry {
     /// referred to it.
     fn remove(&mut self, name: &str) {
         self.clients.retain(|c| c.get_name() != name);
+        self.listings.remove(name);
+        self.losses.remove(name);
+        self.failures.remove(name);
         if self.default.as_ref().is_some_and(|c| c.get_name() == name) {
             self.default = None;
         }
@@ -343,6 +370,9 @@ struct WorkspaceData {
     /// The live derived `Table`s this workspace owns.
     derived: DerivedRegistry,
 
+    /// The session-only join `Table`s this workspace created, by name.
+    joins: BTreeMap<String, JoinTable>,
+
     /// Monotonic counter backing [`Workspace::generate_id`].
     next_id: usize,
 
@@ -369,6 +399,17 @@ struct WorkspaceData {
     /// commit.
     closing: Vec<Panel>,
 
+    /// The element-level "stage" error: the failure of a public call that
+    /// left the element with ZERO panels (a rejected creating `restore`,
+    /// `addPanel`, `restoreWorkspace`, the table-less `load` eviction), so
+    /// there is no panel `Session` to hold it. Shown by the empty-state
+    /// status indicator; cleared when a panel is inserted, by `resetError()`,
+    /// or by dismissing it in the UI.
+    stage_error: Option<perspective_js::utils::ApiError>,
+
+    /// Fires when [`Self::stage_error`] changes.
+    stage_error_changed: Rc<PubSub<()>>,
+
     /// Coalesced `layout_changed`/`active_changed` delivery (see
     /// [`LayoutEmitter`]).
     emitter: LayoutEmitter,
@@ -392,6 +433,7 @@ impl Workspace {
             bindings_changed: Rc::new(PubSub::default()),
             clients: ClientRegistry::default(),
             derived: DerivedRegistry::default(),
+            joins: BTreeMap::new(),
             next_id: 0,
             reservation: Reservation::Idle,
             pending_layout: None,
@@ -400,7 +442,67 @@ impl Workspace {
             layout_staged: Rc::new(PubSub::default()),
             closing: Vec::new(),
             emitter: LayoutEmitter::default(),
+            stage_error: None,
+            stage_error_changed: Rc::new(PubSub::default()),
         })))
+    }
+
+    /// Whether the element is an EMPTY STAGE: zero panels (placed or
+    /// staged) and no pending `load()` reservation. A reservation means a
+    /// `load()` is in flight, which is a loading state, not an empty one.
+    pub fn is_empty_stage(&self) -> bool {
+        let data = self.0.borrow();
+        data.panels.is_empty() && !matches!(data.reservation, Reservation::Pending(_))
+    }
+
+    /// The element-level stage error, if any (see
+    /// [`WorkspaceData::stage_error`]).
+    pub fn stage_error(&self) -> Option<perspective_js::utils::ApiError> {
+        self.0.borrow().stage_error.clone()
+    }
+
+    /// Fires when the stage error is set or cleared.
+    pub fn stage_error_changed(&self) -> Rc<PubSub<()>> {
+        self.0.borrow().stage_error_changed.clone()
+    }
+
+    /// Set (or, with `None`, clear) the stage error, notifying
+    /// [`Self::stage_error_changed`] when the value actually changes.
+    pub fn set_stage_error(&self, error: Option<perspective_js::utils::ApiError>) {
+        let pubsub = {
+            let mut data = self.0.borrow_mut();
+            let changed = match (&data.stage_error, &error) {
+                (None, None) => false,
+                (Some(a), Some(b)) => a.to_string() != b.to_string(),
+                _ => true,
+            };
+
+            data.stage_error = error;
+            changed.then(|| data.stage_error_changed.clone())
+        };
+
+        if let Some(pubsub) = pubsub {
+            pubsub.emit(());
+        }
+    }
+
+    /// Record `result`'s error as the stage error when the call left the
+    /// element an empty stage, so a failure with no panel to show it on is
+    /// still visible. Cancellations (`View not found`) are ignored. Returns
+    /// `result` unchanged.
+    pub fn surface_stage_error<T>(
+        &self,
+        result: perspective_js::utils::ApiResult<T>,
+    ) -> perspective_js::utils::ApiResult<T> {
+        use perspective_js::utils::*;
+        if let Err(e) = &result
+            && self.is_empty_stage()
+            && Err::<(), _>(e.clone()).ignore_view_delete().is_err()
+        {
+            self.set_stage_error(Some(e.clone()));
+        }
+
+        result
     }
 
     /// The element's in-flight effect ledger (see [`EffectLedger`]).
@@ -764,6 +866,8 @@ impl Workspace {
             pubsub.emit(());
         }
 
+        // A panel now exists to carry its own errors.
+        self.set_stage_error(None);
         self.bindings_changed().emit(());
     }
 
@@ -1050,6 +1154,155 @@ impl Workspace {
         clients
     }
 
+    /// The loaded [`Client`] named `name`.
+    pub fn client(&self, name: &str) -> Option<Client> {
+        self.clients().into_iter().find(|c| c.get_name() == name)
+    }
+
+    /// A handle to the PubSub emitted when a loaded [`Client`]'s connection
+    /// is lost or recovered.
+    pub fn client_state_changed(&self) -> Rc<PubSub<()>> {
+        self.0.borrow().clients.client_state_changed.clone()
+    }
+
+    /// The error of the connection loss of the [`Client`] named `name` which
+    /// the viewer has not yet recovered from.
+    pub fn client_loss(&self, name: &str) -> Option<ClientError> {
+        self.0.borrow().clients.losses.get(name).cloned()
+    }
+
+    /// Record that `client`'s connection was lost, superseding any earlier
+    /// reconnect failure.
+    pub fn record_client_loss(&self, client: &Client, error: ClientError) {
+        let mut data = self.0.borrow_mut();
+        data.clients.failures.remove(client.get_name());
+        data.clients
+            .losses
+            .insert(client.get_name().to_owned(), error);
+    }
+
+    /// The error of the last reconnect of the [`Client`] named `name`, if it
+    /// failed.
+    pub fn client_failure(&self, name: &str) -> Option<perspective_js::utils::ApiError> {
+        self.0.borrow().clients.failures.get(name).cloned()
+    }
+
+    /// Record the outcome of a reconnect of the [`Client`] named `name`.
+    pub fn set_client_failure(&self, name: &str, failure: Option<perspective_js::utils::ApiError>) {
+        let pubsub = {
+            let mut data = self.0.borrow_mut();
+            match failure {
+                Some(error) => data.clients.failures.insert(name.to_owned(), error),
+                None => data.clients.failures.remove(name),
+            };
+
+            data.clients.client_state_changed.clone()
+        };
+
+        pubsub.emit(());
+    }
+
+    /// Record that the viewer recovered from `client`'s connection loss.
+    pub fn clear_client_loss(&self, client: &Client) {
+        self.0.borrow_mut().clients.losses.remove(client.get_name());
+    }
+
+    /// The last hosted-table listing recorded for the [`Client`] named
+    /// `name`.
+    pub fn client_listing(&self, name: &str) -> ClientListing {
+        self.0
+            .borrow()
+            .clients
+            .listings
+            .get(name)
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    /// The listed `Table` names of every open [`Client`], in registration
+    /// order.
+    pub fn open_hosted_tables(&self) -> Vec<(String, Vec<String>)> {
+        self.open_clients()
+            .into_iter()
+            .map(|client| {
+                let name = client.get_name().to_owned();
+                let tables = self.client_listing(&name).tables.unwrap_or_default();
+                (name, tables)
+            })
+            .collect()
+    }
+
+    fn record_listing(&self, name: &str, result: Result<Vec<String>, String>) {
+        let is_changed = {
+            let mut data = self.0.borrow_mut();
+            let listing = data.clients.listings.entry(name.to_owned()).or_default();
+            let next = match result {
+                Ok(mut tables) => {
+                    tables.sort_unstable();
+                    ClientListing {
+                        tables: Some(tables),
+                        error: None,
+                    }
+                },
+                Err(error) => ClientListing {
+                    tables: listing.tables.clone(),
+                    error: Some(error),
+                },
+            };
+
+            let is_changed = *listing != next;
+            *listing = next;
+            is_changed
+        };
+
+        if is_changed {
+            self.hosted_tables_changed().emit(());
+        }
+    }
+
+    /// Ask `client` for its hosted `Table` names and record the answer.
+    pub async fn list_tables(&self, client: &Client) -> Option<Vec<String>> {
+        let result = client.get_hosted_table_names().await;
+        self.record_listing(client.get_name(), result.clone().map_err(|x| x.to_string()));
+
+        result.ok()
+    }
+
+    /// The loaded [`Client`]s whose connection is open, in registration
+    /// order.
+    pub fn open_clients(&self) -> Vec<Client> {
+        self.clients()
+            .into_iter()
+            .filter(|client| client.connection().is_open())
+            .collect()
+    }
+
+    /// Every `Table` name hosted by an open [`Client`], asking each in turn.
+    pub async fn probe_table_names(&self) -> BTreeSet<String> {
+        let mut names = BTreeSet::new();
+        for client in self.open_clients() {
+            names.extend(self.list_tables(&client).await.into_iter().flatten());
+        }
+
+        names
+    }
+
+    /// Record `client`'s hosted-tables subscription `id`, replacing an
+    /// earlier one for the same client.
+    pub fn set_table_sub(&self, client: Client, id: u32) {
+        let mut data = self.0.borrow_mut();
+        data.clients
+            .table_subs
+            .retain(|(c, _)| c.get_name() != client.get_name());
+
+        data.clients.table_subs.push((client, id));
+    }
+
+    /// Take every hosted-tables subscription, for removal at `delete()`.
+    pub fn take_table_subs(&self) -> Vec<(Client, u32)> {
+        std::mem::take(&mut self.0.borrow_mut().clients.table_subs)
+    }
+
     /// Resolve which loaded [`Client`] a panel should bind to serve the `Table`
     /// named `table_name`, given its `current` binding (if any).
     pub async fn resolve_client_for_table(
@@ -1065,11 +1318,11 @@ impl Workspace {
         }
 
         let mut host = None;
-        for client in &clients {
-            if let Ok(names) = client.get_hosted_table_names().await
+        for client in self.open_clients() {
+            if let Some(names) = self.list_tables(&client).await
                 && names.iter().any(|n| n.as_str() == table_name)
             {
-                host = Some(client.clone());
+                host = Some(client);
                 break;
             }
         }
@@ -1157,6 +1410,40 @@ impl Workspace {
             .count();
 
         bound + data.derived.children(name).len()
+    }
+
+    /// Every session-only join `Table` this workspace created, by name.
+    pub fn joins(&self) -> BTreeMap<String, JoinTable> {
+        self.0.borrow().joins.clone()
+    }
+
+    /// How many panels, derivations and joins read `name`.
+    pub fn table_consumers(&self, name: &str) -> usize {
+        let joins = self
+            .0
+            .borrow()
+            .joins
+            .values()
+            .filter(|join| join.left == name || join.right == name)
+            .count();
+
+        self.derived_consumers(name) + joins
+    }
+
+    pub fn register_join(&self, name: String, join: JoinTable) {
+        self.0.borrow_mut().joins.insert(name, join);
+        self.hosted_tables_changed().emit(());
+    }
+
+    /// Take a join out of the registry so the caller can await its deletion
+    /// outside the borrow.
+    pub fn take_join(&self, name: &str) -> Option<JoinTable> {
+        let join = self.0.borrow_mut().joins.remove(name);
+        if join.is_some() {
+            self.hosted_tables_changed().emit(());
+        }
+
+        join
     }
 
     pub fn register_derived(&self, name: String, table: DerivedTable) {

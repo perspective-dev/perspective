@@ -23,10 +23,10 @@
         "@perspective-dev/viewer": "workspace:^",
         "@perspective-dev/client": "workspace:^",
         "@perspective-dev/server": "workspace:^",
-        "puppeteer": "catalog:",
         "superstore-arrow": "catalog:"
     },
     "devDependencies": {
+        "@playwright/test": "catalog:",
         "@zip.js/zip.js": "catalog:",
         "esbuild": "catalog:",
         "lightningcss": "catalog:",

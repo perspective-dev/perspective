@@ -161,12 +161,13 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt;
 
+use schemars::JsonSchema;
 use serde::de::value::MapAccessDeserializer;
 use serde::de::{MapAccess, Visitor};
 use serde::{Deserialize, Deserializer, Serialize};
 use ts_rs::TS;
 
-#[derive(Serialize, Clone, PartialEq, Debug, Default, TS)]
+#[derive(Serialize, Clone, PartialEq, Debug, Default, JsonSchema, TS)]
 pub struct Expressions(pub HashMap<String, String>);
 
 impl<'de> Deserialize<'de> for Expressions {

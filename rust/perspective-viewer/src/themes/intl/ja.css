@@ -21,6 +21,7 @@ perspective-viewer {
     --psp-label--all-columns--content: "すべての列";
     --psp-label--add-all-columns--content: "+ すべて";
     --psp-label--clear-columns--content: "クリア";
+    --psp-label--no-table--content: "テーブルが読み込まれていません";
     --psp-label--untitled--content: "無題";
 
     /* Plugin names */
@@ -67,6 +68,7 @@ perspective-viewer {
     --psp-label--new-from-panel--content: "パネルから新規";
     --psp-label--apply-button--content: "適用";
     --psp-label--paste-button--content: "貼り付け";
+    --psp-label--formatted-button--content: "整形";
     --psp-label--edit-mode-read-only--content: "読み取り専用";
     --psp-label--edit-mode-edit--content: "テキスト編集";
     --psp-label--edit-mode-select-row--content: "行を選択";
@@ -130,6 +132,23 @@ perspective-viewer {
     --psp-label--plugin-tab--content: "プラグイン";
     --psp-label--debug-tab--content: "JSON";
     --psp-label--chat-tab--content: "チャット";
+    --psp-label--tables-tab--content: "テーブル";
+    --psp-label--client-default--content: "既定";
+    --psp-label--client-reconnect--content: "再接続";
+    --psp-label--client-retry--content: "再試行";
+    --psp-label--error-details--content: "詳細";
+    --psp-label--tables-loading--content: "テーブルを読み込み中";
+    --psp-label--tables-no-clients--content: "クライアントなし";
+    --psp-label--views--content: "ビュー";
+    --psp-label--join-open--content: "結合";
+    --psp-label--join-left--content: "左テーブル";
+    --psp-label--join-right--content: "右テーブル";
+    --psp-label--join-on--content: "結合キー";
+    --psp-label--join-right-on--content: "右の結合キー";
+    --psp-label--join-type--content: "種類";
+    --psp-label--join-name--content: "名前";
+    --psp-label--join-create--content: "作成";
+    --psp-label--join-cancel--content: "キャンセル";
 
     /* Chat panel */
     --psp-label--chat-reasoning--content: "推論";
@@ -179,7 +198,6 @@ perspective-viewer {
     --psp-label--grid-columns--content: "グリッドの列数";
     --psp-label--grid-rows--content: "グリッドの行数";
     --psp-label--chart-type--content: "グリフの種類";
-    --psp-label--new-panel-button--content: "新規";
 
     /* Plugin settings — viewer-charts */
     --psp-label--auto-alt-y-axis--content: "自動デュアルY軸";

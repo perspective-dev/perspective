@@ -13,6 +13,7 @@
 use std::collections::HashMap;
 use std::ops::Deref;
 
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use ts_rs::TS;
@@ -166,7 +167,8 @@ impl Deref for PluginConfig {
 
 /// The `restore()` argument: a field-wise update of a panel's state, where an
 /// absent key is unchanged, `null` resets and a value replaces.
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, TS)]
+#[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+#[schemars(deny_unknown_fields)]
 pub struct ViewerConfigUpdate {
     /// The `@perspective-dev/viewer` version a saved config was written
     /// by, named in the error when such a config is rejected. Omit it — the
@@ -248,6 +250,7 @@ pub struct ViewerConfigUpdate {
     /// Rejects keys no field above consumed.
     #[serde(flatten, skip_serializing)]
     #[ts(skip)]
+    #[schemars(skip)]
     pub unknown: UnknownKeys,
 }
 
@@ -258,7 +261,8 @@ pub struct ViewerConfigUpdate {
 /// binding would be permanently blank), absent fields mean "default"
 /// rather than "leave unchanged" (so no [`OptionalUpdate`] tri-state), and
 /// there is no `settings` field (element-level, not per-panel).
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, TS)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+#[schemars(deny_unknown_fields)]
 pub struct ViewerConfigInitial {
     /// Name of the `Table` the new panel renders, as hosted on the
     /// `Client`. REQUIRED: a placed panel with no table binding would be
@@ -309,6 +313,7 @@ pub struct ViewerConfigInitial {
     /// Rejects keys no field above consumed.
     #[serde(flatten, skip_serializing)]
     #[ts(skip)]
+    #[schemars(skip)]
     pub unknown: UnknownKeys,
 }
 

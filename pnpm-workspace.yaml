@@ -21,28 +21,12 @@ packages:
     - "examples/*"
     - "docs"
 
-overrides:
-    "@perspective-dev/client@4.0.0>@perspective-dev/server": "4.0.0"
-    "@perspective-dev/client@4.1.0>@perspective-dev/server": "4.1.0"
-    "@perspective-dev/client@4.2.0>@perspective-dev/server": "4.2.0"
-    "@perspective-dev/client@4.3.0>@perspective-dev/server": "4.3.0"
-    "@perspective-dev/client@4.4.0>@perspective-dev/server": "4.4.0"
-    "@perspective-dev/client@4.5.0>@perspective-dev/server": "4.5.0"
-    "@perspective-dev/client@5.0.0>@perspective-dev/server": "5.0.0"
-    "@perspective-dev/client@5.1.0>@perspective-dev/server": "5.1.0"
-    "@perspective-dev/client@5.2.0>@perspective-dev/server": "5.2.0"
-    "@perspective-dev/client@5.3.0>@perspective-dev/server": "5.3.0"
-    "@perspective-dev/client@5.4.0>@perspective-dev/server": "5.4.0"
-    "@perspective-dev/client@5.5.0>@perspective-dev/server": "5.5.0"
-    "apache-arrow>@types/node": "catalog:"
-
 allowBuilds:
     "@fortawesome/fontawesome-free": true
     aws-sdk: true
     core-js: true
     esbuild: true
     microtime: true
-    puppeteer: false
 
 catalog:
     # Dependencies
@@ -67,13 +51,13 @@ catalog:
 
     # Dev Dependencies
     "@clickhouse/client-web": "^1.12.0"
-    "@duckdb/duckdb-wasm": "^1.32.0"
+    "@duckdb/duckdb-wasm": ^1.33.1-dev57.0
     "@fontsource/roboto-mono": "4.5.10"
     "@iarna/toml": "3.0.0"
     "@jupyterlab/builder": "^4"
     "@playwright/experimental-ct-react": "=1.62.0"
     "@playwright/test": "=1.62.0"
-    "lightningcss": "^1.29.0"
+    "@types/chroma-js": "^3.1.2"
     "@types/emscripten": "^1.39.10"
     "@types/lodash": "^4.17.20"
     "@types/node": ">=22"
@@ -81,18 +65,18 @@ catalog:
     "@types/react": ">17 <20"
     "@types/stoppable": ">=1"
     "@types/ws": ">=8"
-    "@types/chroma-js": "^3.1.2"
     "@zip.js/zip.js": "^2.7.54"
-    "apache-arrow": "17.0.0"
+    "ajv": "^8.2"
+    "apache-arrow": 21.2.0
     "arraybuffer-loader": ">=1.0.8 <2"
     "auto-changelog": "^2.5.0"
-    "chalk": ">=5"
-    "commander": ">=14 <15"
+    "chalk": ^6.0.1
+    "commander": ^15.1.0
     "copy-webpack-plugin": "~12"
     "css-loader": ">=7 <8"
-    "dotenv": ">=17"
-    "esbuild": "^0.25.5"
-    "eslint": "^9.0.0"
+    "dotenv": ^18.0.10
+    "esbuild": ^0.28.2
+    "eslint": ^10.15.0
     "express-ws": ">=5 <6"
     "express": ">=5 <6"
     "fs-extra": ">=11 <12"
@@ -100,30 +84,27 @@ catalog:
     "gradient-parser": ">=1 <2"
     "html-webpack-plugin": ">=5 <6"
     "http-server": "^14.1.1"
-    "husky": ">=9"
-    "inquirer": ">=12 <13"
+    "husky": ^9.1.7
+    "inquirer": ^14.3.1
     "less": "^4.1.0"
+    "lightningcss": "^1.29.0"
     "lodash": "^4.17.20"
-    "microtime": ">=3 <4"
+    "microtime": ^4.0.1
     "mkdirp": "^0.5.6"
     "moment": "^2.30.1"
     "npm-run-all": "^4.1.5"
-    "octokit": "^1.8.1"
-    "prettier": ">=3 <4"
-    "puppeteer": ">=24"
+    "octokit": ^5.0.5
+    "playwright-core": "=1.62.0"
+    "prettier": ^3.10.1
     "style-loader": ">=4 < 5"
     "superstore-arrow": "3.2.0"
     "tar": "^7.4.3"
-    "tsx": "^4.20.3"
+    "tsx": ^4.23.15
     "typedoc": "^0.28.7"
-    "typescript": ">=5 <6"
-    "typescript-eslint": "^8.0.0"
-    "vite": ">=6 <7"
-    "webpack-cli": ">=5 <6"
+    "typescript-eslint": ^8.74.0
+    "typescript": ^7.0.2
+    "vite": ^8.3.0
+    "web-worker": 1.4.1
+    "webpack-cli": ^7.3.1
     "webpack": ">=5 <6"
-    "web-worker": "1.4.1"
     "zx": ">=8 <9"
-
-minimumReleaseAgeExclude:
-    - pro_self_extracting_wasm@0.0.11
-    - regular-layout@0.8.1

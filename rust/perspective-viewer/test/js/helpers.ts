@@ -56,6 +56,21 @@ export const DEFAULT_CONFIG: ViewerConfigUpdate = {
     theme: "Pro Light",
 };
 
+/** Open the workspace panel, if closed, and select one of its tabs. */
+export async function openWorkspaceTab(
+    page: Page,
+    tab: "tables" | "json" | "chat",
+    selector = "perspective-viewer",
+): Promise<void> {
+    await page.evaluate(async (selector) => {
+        await (document.querySelector(selector) as any).toggleWorkspaceConfig(
+            true,
+        );
+    }, selector);
+
+    await page.locator(`${selector} #workspace_${tab}_tab`).click();
+}
+
 export async function compareContentsToSnapshot(
     contents: string,
     extraSnapshotPath?: string[],

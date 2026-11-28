@@ -17,7 +17,6 @@
 
 @import "ui/containers/split-panel.css";
 @import "ui/containers/scroll-panel.css";
-@import "containers/pairs-list.css";
 @import "ui/containers/tabs.css";
 
 @import "type-icon.css";
@@ -27,12 +26,14 @@
 @import "config-selector.css";
 @import "column-selector.css";
 @import "column-style.css";
-@import "column-symbol-attributes.css";
 @import "column-settings-panel.css";
 @import "expression-editor.css";
 @import "plugin-selector.css";
 @import "render-warning.css";
 @import "status-bar.css";
+@import "status-indicator.css";
+@import "error-dialog.css";
+@import "workspace-panel.css";
 
 @import "ui/form/mirrored-textarea.css";
 @import "ui/form/sidebar-controls.css";

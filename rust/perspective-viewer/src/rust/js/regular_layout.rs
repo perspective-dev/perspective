@@ -186,6 +186,9 @@ pub trait LayoutExt {
 
     #[doc(hidden)]
     fn view_window_in(&self, name: &str, window: ViewWindow) -> Option<ViewWindow>;
+
+    /// The visible panel of the stack at the top-left of the layout.
+    fn top_left(&self) -> Option<&str>;
 }
 
 impl LayoutExt for Layout {
@@ -224,6 +227,13 @@ impl LayoutExt for Layout {
                 sizes: vec![0.5, 0.5],
                 orientation,
             }),
+        }
+    }
+
+    fn top_left(&self) -> Option<&str> {
+        match self {
+            Layout::Tab(tab) => tab.tabs.get(tab.selected.unwrap_or(0)).map(String::as_str),
+            Layout::Split(split) => split.children.first()?.top_left(),
         }
     }
 

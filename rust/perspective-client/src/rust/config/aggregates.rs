@@ -12,12 +12,13 @@
 
 use std::fmt::Display;
 
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::proto::{ColumnType, view_config};
 
-#[derive(Clone, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize, TS)]
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, Ord, PartialEq, PartialOrd, Serialize, TS)]
 #[serde(untagged)]
 pub enum Aggregate {
     SingleAggregate(String),

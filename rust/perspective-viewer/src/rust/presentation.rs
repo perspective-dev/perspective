@@ -127,6 +127,9 @@ pub struct PresentationHandle {
     pub settings_open_changed: PubSub<(bool, bool)>,
     pub on_is_workspace_changed: RefCell<Option<Callback<bool>>>,
     pub settings_before_open_changed: PubSub<bool>,
+
+    /// Fires with the workspace drawer's new open state.
+    pub workspace_drawer_open_changed: PubSub<bool>,
     pub column_settings_open_changed: PubSub<(bool, Option<String>)>,
     pub theme_config_updated: PubSub<(PtrEqRc<Vec<String>>, Option<usize>)>,
     pub on_eject: PubSub<()>,
@@ -187,6 +190,7 @@ impl Presentation {
             is_workspace: Default::default(),
             settings_open_changed: Default::default(),
             settings_before_open_changed: Default::default(),
+            workspace_drawer_open_changed: Default::default(),
             column_settings_open_changed: Default::default(),
             on_is_workspace_changed: Default::default(),
             is_settings_open: Default::default(),

@@ -21,6 +21,7 @@ perspective-viewer {
     --psp-label--all-columns--content: "Todas las columnas";
     --psp-label--add-all-columns--content: "+ Todas";
     --psp-label--clear-columns--content: "Borrar";
+    --psp-label--no-table--content: "No hay ninguna tabla cargada";
     --psp-label--untitled--content: "Sin título";
 
     /* Plugin names */
@@ -66,6 +67,7 @@ perspective-viewer {
     --psp-label--new-from-panel--content: "Nuevo desde panel";
     --psp-label--apply-button--content: "Aplicar";
     --psp-label--paste-button--content: "Pegar";
+    --psp-label--formatted-button--content: "Formato";
     --psp-label--edit-mode-read-only--content: "Solo lectura";
     --psp-label--edit-mode-edit--content: "Edición de texto";
     --psp-label--edit-mode-select-row--content: "Seleccionar fila";
@@ -130,6 +132,23 @@ perspective-viewer {
     --psp-label--plugin-tab--content: "Plugin";
     --psp-label--debug-tab--content: "JSON";
     --psp-label--chat-tab--content: "Chat";
+    --psp-label--tables-tab--content: "Tablas";
+    --psp-label--client-default--content: "predeterminado";
+    --psp-label--client-reconnect--content: "Reconectar";
+    --psp-label--client-retry--content: "Reintentar";
+    --psp-label--error-details--content: "Detalles";
+    --psp-label--tables-loading--content: "Cargando tablas";
+    --psp-label--tables-no-clients--content: "Sin clientes";
+    --psp-label--views--content: "Vistas";
+    --psp-label--join-open--content: "Unir";
+    --psp-label--join-left--content: "Tabla izquierda";
+    --psp-label--join-right--content: "Tabla derecha";
+    --psp-label--join-on--content: "En";
+    --psp-label--join-right-on--content: "En (derecha)";
+    --psp-label--join-type--content: "Tipo";
+    --psp-label--join-name--content: "Nombre";
+    --psp-label--join-create--content: "Crear";
+    --psp-label--join-cancel--content: "Cancelar";
 
     /* Chat panel */
     --psp-label--chat-reasoning--content: "Razonamiento";
@@ -179,7 +198,6 @@ perspective-viewer {
     --psp-label--grid-columns--content: "Columnas de la cuadrícula";
     --psp-label--grid-rows--content: "Filas de la cuadrícula";
     --psp-label--chart-type--content: "Tipo de glifo";
-    --psp-label--new-panel-button--content: "Nuevo";
 
     /* Plugin settings — viewer-charts */
     --psp-label--auto-alt-y-axis--content: "Eje Y dual automático";

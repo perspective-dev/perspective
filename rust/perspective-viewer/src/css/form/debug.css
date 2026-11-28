@@ -12,12 +12,14 @@
  */
 
 :host {
-    #debug-panel-overflow {
+    #debug-panel-overflow,
+    #workspace-json-overflow {
         overflow: hidden;
         display: flex;
     }
 
-    #debug-panel {
+    #debug-panel,
+    #workspace-json {
         display: flex;
         min-width: 150px;
         label {
@@ -26,46 +28,61 @@
             font-size: var(--label--font-size, 0.75em);
         }
 
-        #debug-panel-controls {
+        #debug-panel-controls,
+        #workspace-json-controls {
             button {
-                &#debug-panel-apply:before {
+                &#debug-panel-apply:before,
+                &#workspace-json-apply:before {
                     content: var(
                         --psp-label--apply-button--content,
                         var(--psp-missing)
                     );
                 }
 
-                &#debug-panel-reset:before {
+                &#debug-panel-reset:before,
+                &#workspace-json-reset:before {
                     content: var(
                         --psp-label--reset-button--content,
                         var(--psp-missing)
                     );
                 }
 
-                &#debug-panel-copy:before {
+                &#debug-panel-copy:before,
+                &#workspace-json-copy:before {
                     content: var(
                         --psp-label--copy-button--content,
                         var(--psp-missing)
                     );
                 }
 
-                &#debug-panel-paste:before {
+                &#debug-panel-paste:before,
+                &#workspace-json-paste:before {
                     content: var(
                         --psp-label--paste-button--content,
+                        var(--psp-missing)
+                    );
+                }
+
+                &#debug-panel-formatted:before,
+                &#workspace-json-formatted:before {
+                    content: var(
+                        --psp-label--formatted-button--content,
                         var(--psp-missing)
                     );
                 }
             }
         }
 
-        #debug-panel-editor {
+        #debug-panel-editor,
+        #workspace-json-editor {
             display: flex;
             flex-direction: column;
             flex: 0 1 auto;
             overflow: hidden;
             padding: 8px 8px 8px 0;
 
-            #debug-panel-error {
+            #debug-panel-error,
+            #workspace-json-error {
                 flex: 0 0 auto;
                 padding-top: 6px;
                 font-size: 10px;
@@ -81,6 +98,11 @@
             border-radius: 2px;
             font-size: 0.8em;
             /* height: 100%; */
+            align-items: flex-start;
+
+            .editor-inner {
+                min-height: 100%;
+            }
         }
     }
 }
